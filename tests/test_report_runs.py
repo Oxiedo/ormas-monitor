@@ -82,7 +82,8 @@ def test_broken_watch_only_summary(runs):
     f = analyse(runs["watch"])
     assert "PROBLEM, NOT REPAIRED" in md
     assert f"Part of the model stopped learning (detected at step {LESION_AT}) and was still stuck" in md
-    assert "At step 60 it found 1 layer (3) with stuck channels; 16 channels were proven dead" in md
+    assert "At step 60 it found stuck channels in layer `3` (Conv2d); 16 channels were proven dead" in md
+    assert "<code>3</code> (Conv2d)" in (runs["watch"] / "summary.html").read_text(encoding="utf-8")
     assert "They were still stuck when the run ended." in md
     # the zeroed layer is stuck from the check that saw it until the last step
     assert f.cost.stuck_steps == STEPS - LESION_AT and f.cost.proven_steps == STEPS - LESION_AT
@@ -98,7 +99,12 @@ def test_broken_repair_summary(runs):
     f = analyse(runs["repair"])
     rep = next(e for e in f.events if e["event"] == "repair")
     assert "PROBLEM FOUND AND REPAIRED" in md
-    assert f"the monitor repaired it at step {rep['step']}, and no part was stuck after that." in md
+    reps = [e for e in f.events if e["event"] == "repair"]
+    last = max(ep.end for ep in f.episodes)
+    assert (f"the monitor repaired {sum(e['count'] for e in reps)} channels by step "
+            f"{max(e['step'] for e in reps)}. After step {last}, no check found a channel proven dead, "
+            f"constant or decayed to ~0.") in md
+    assert "no part was stuck" not in md and "no layer was stuck" not in md.lower()
     assert f"The monitor repaired {rep['count']} channels in 1 layer (at step {rep['step']})" in md
     # stuck from detection until the repair at a later check
     assert f.cost.stuck_steps == rep["step"] - LESION_AT > 0

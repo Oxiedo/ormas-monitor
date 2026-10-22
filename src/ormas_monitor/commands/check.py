@@ -35,7 +35,9 @@ def register(sub) -> None:
     c.add_argument("--json", action="store_true", help="print the result as JSON on stdout")
     c.add_argument("--arch", help="exact wiring from a known model: torchvision:<name> (e.g. "
                                   "torchvision:resnet50), or hf to build the model from config.json "
-                                  "(random init, no download)")
+                                  "(random init, no download). Builds the model without weights to "
+                                  "trace it; importing torchvision takes about a second, longer on "
+                                  "the first run after installing it")
     c.add_argument("--trust", action="store_true",
                    help="allow loading files that contain Python objects (can run code)")
     c.add_argument("--fail-on", choices=tuple(FAIL_ON), default="critical",
@@ -78,13 +80,31 @@ def run(a) -> int:
         wiring = (f"traced from {w['source']}" if w["traced"] else "name-based heuristic") if w["batchnorms"] \
             else "no BatchNorm layers"
         say(f"{Path(a.file).name}: {result['parameters']:,} parameters in {result['tensors']:,} tensors "
-            f"({result['format']}, {dtypes}); wiring: {wiring}; {len(f)} findings in {seconds:.1f} s")
+            f"({result['format']}, {dtypes}); wiring: {wiring}; {_count(len(f), 'finding')} in {seconds:.1f} s")
         for x in f:
             say(f"  [{x['severity']}] {x['title']}")
         for n in result["notes"]:
             say(f"  note: {n}")
         say(f"report: {out}")
-        if failing:
-            say(f"exit 1: {len(failing)} finding{'s' if len(failing) != 1 else ''} at or above "
-                f"--fail-on {a.fail_on}")
+        say(exit_reason(result["findings"], a.fail_on))
     return 1 if failing else 0
+
+
+def _count(n: int, word: str) -> str:
+    return f"{n} {word}{'s' if n != 1 else ''}"
+
+
+def exit_reason(findings: list[dict], fail_on: str) -> str:
+    """The last line of the summary: which exit code, and why (e.g. warnings that did not count)."""
+    n = {s: sum(1 for f in findings if f["severity"] == s) for s in ("critical", "warning")}
+    if fail_on == "never":
+        found = [_count(n[s], s) for s in n if n[s]]
+        return f"exit 0: --fail-on never ({', '.join(found) if found else 'no critical or warning findings'})"
+    failing = sum(n[s] for s in FAIL_ON[fail_on])
+    if failing:
+        parts = ", ".join(_count(n[s], s) for s in FAIL_ON[fail_on] if n[s])
+        return f"exit 1: {parts} at or above --fail-on {fail_on}"
+    if fail_on == "critical" and n["warning"]:
+        return (f"exit 0: no critical findings ({_count(n['warning'], 'warning')}; "
+                "use --fail-on warning to fail on them)")
+    return "exit 0: no critical findings" if fail_on == "critical" else "exit 0: no critical or warning findings"

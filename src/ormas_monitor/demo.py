@@ -119,7 +119,8 @@ def run(out: str | Path = "ormas_demo", data: str | Path = "data", before: int =
         o.load_state_dict(snap[1])
         g = torch.Generator().manual_seed(seed + 1)
         print(f"--- {arm}: the monitor {'watches and repairs' if repair else 'only watches'}")
-        mon = Monitor(m, o, out=Path(out) / arm, repair=repair, name=f"CIFAR-10 dead-layer demo ({arm})")
+        mon = Monitor(m, o, out=Path(out) / arm, repair=repair, name=f"CIFAR-10 dead-layer demo ({arm})",
+                      overwrite=True)                 # the demo's own directories: re-runnable
         epoch(m, o, xtr, ytr, g, mon)                 # one normal epoch: every layer gets a baseline
         with torch.no_grad():                         # the lesion: conv2 and conv3 zeroed
             for blk in (m.conv2, m.conv3):

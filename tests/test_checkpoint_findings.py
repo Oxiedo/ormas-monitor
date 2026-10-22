@@ -134,6 +134,7 @@ def test_newly_dead_and_dtype_change(tmp_path):
     torch.save(m.state_dict(), tmp_path / "before.pt")
     with torch.no_grad():
         m[0].weight[:3] = 0
+        m[0].bias[:3] = 0
         m[1].bias[:3] = -1
     torch.save({k: (v.half() if v.is_floating_point() else v) for k, v in m.state_dict().items()},
                tmp_path / "after.pt")
@@ -155,3 +156,68 @@ def test_open_source_reads_lazily(tmp_path):
     torch.save(TinyLM().state_dict(), tmp_path / "a.pt")
     with open_source(tmp_path / "a.pt") as src:
         assert src.streamed and src.info["embed_tokens.weight"].shape == (50, 16)
+
+
+def test_titles_name_layer_kind_from_weight_rank():
+    torch.manual_seed(0)
+    m = nn.Sequential(nn.Linear(6, 8), nn.BatchNorm1d(8), nn.ReLU(), nn.Linear(8, 4))
+    sd = m.state_dict()
+    sd["0.weight"][:2] = 0
+    sd["0.bias"][:2] = 0
+    sd["1.bias"][:2] = -1
+    sd["3.weight"][1] = 0
+    titles = {f["kind"]: f["title"] for f in check(sd)["findings"]}
+    assert titles["dead_channels"] == ("2 of 8 channels in layer `0` (Linear, BatchNorm `1`) are dead for good "
+                                       "if a ReLU directly follows `1`")
+    assert titles["zero_filters"] == "1 of 4 output units of layer `3` (Linear) have all-zero weights"
+    traced = {f["kind"]: f["title"] for f in check(sd, relu_after={"1"})["findings"]}
+    assert traced["dead_channels"] == "2 of 8 channels in layer `0` (Linear, BatchNorm `1`) are dead for good"
+
+
+def test_title_without_a_producer_names_the_batchnorm():
+    bn = nn.BatchNorm2d(4)
+    with torch.no_grad():
+        bn.weight[0] = 0
+        bn.bias[0] = -1
+    f = next(f for f in check({f"stem.bn.{k}": v for k, v in bn.state_dict().items()})["findings"]
+             if f["kind"] == "dead_channels")
+    assert f["title"].startswith("1 of 4 channels in BatchNorm `stem.bn` are dead for good")
+
+
+def zero_filter_with_bias(bias: float, beta: float, gamma: float = 1.0) -> dict:
+    """Linear(bias) -> BatchNorm1d with unit 0's filter zeroed (repro r5: BN of a constant column)."""
+    torch.manual_seed(0)
+    m = nn.Sequential(nn.Linear(5, 2), nn.BatchNorm1d(2), nn.ReLU())
+    with torch.no_grad():
+        m[0].weight[0] = 0
+        m[0].bias[0] = bias
+        m[1].weight[0] = gamma
+        m[1].bias[0] = beta
+    return m.state_dict()
+
+
+def certified(sd: dict, tmp_path, name: str) -> list[int]:
+    torch.save(sd, tmp_path / f"{name}.pt")
+    res = run(tmp_path / f"{name}.pt")
+    in_findings = sorted(c for f in res["findings"] if f["kind"] == "dead_channels" for c in f["channels"])
+    in_layers = sorted(c for l in res["layers"] for c in l["certified"])
+    assert in_findings == in_layers                    # findings and layers agree
+    return in_layers
+
+
+def test_zero_filter_with_nonzero_producer_bias_is_not_certified(tmp_path):
+    # In floats, BatchNorm of a constant nonzero column is not exactly beta: up to ~1e-3 above it,
+    # so with beta = 0 the ReLU opens on some inputs and the channel is not provably dead.
+    assert certified(zero_filter_with_bias(bias=0.7, beta=0.0), tmp_path, "biased") == []
+    assert certified(zero_filter_with_bias(bias=0.0, beta=0.0), tmp_path, "unbiased") == [0]
+    assert certified(zero_filter_with_bias(bias=0.7, beta=0.0, gamma=0.0), tmp_path, "gamma0") == [0]
+    torch.save(zero_filter_with_bias(bias=0.7, beta=-1.0), tmp_path / "shut.pt")
+    res = run(tmp_path / "shut.pt")                    # nearly constant and shut: decayed, a warning
+    assert res["layers"][0]["certified"] == [] and res["layers"][0]["decayed"] == [0]
+    assert [f["kind"] for f in res["findings"] if f["severity"] == "warning"] == ["decayed_channels"]
+
+
+def test_newly_dead_agrees_with_certificate_rule(tmp_path):
+    torch.save(zero_filter_with_bias(bias=0.0, beta=0.5), tmp_path / "before.pt")
+    torch.save(zero_filter_with_bias(bias=0.7, beta=0.0), tmp_path / "after.pt")
+    assert run(tmp_path / "after.pt", against=tmp_path / "before.pt")["diff"]["newly_dead"] == []

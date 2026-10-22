@@ -4,6 +4,7 @@ a real `diff_runs` output, and checkpoint results with unknown finding kinds."""
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from html import escape
 from pathlib import Path
@@ -131,7 +132,11 @@ def test_diff_report_from_real_diff_runs(tmp_path):
     b = _tiny_run(tmp_path / "repair", repair=True)
     result = diff.diff_runs(a, b)
     html = write_diff_report(result, tmp_path / "diff.html").read_text(encoding="utf-8")
-    assert result["verdict"].split(".")[0] in html
+    assert escape(result["verdict"]) in html                      # the diff's own headline, verbatim
+    if result.get("verdict_detail"):
+        assert escape(result["verdict_detail"]) in html
+    assert "Run B less healthy" not in html and "Run B healthier" not in html   # no headline of our own
+    assert "from the two runs&#x27; records" in html and "run&#x27;s own record" not in html
     assert "config.repair" in html and "Run A" in html and "Run B" in html
     assert "<span class='mono'>0</span>" in html and "Repairs" in html
 
@@ -178,7 +183,8 @@ def test_check_report_from_real_checkpoint(tmp_path):
     alone = check(tmp_path / "after.pt")
     html = write_check_report(alone, tmp_path / "alone.html").read_text(encoding="utf-8")
     assert "Checkpoint health report" in html and "What changed" not in html
-    assert "3/8 channels" in html
+    assert re.search(r"3(/| of )8 channels", html)
+    assert "run&#x27;s own record" not in html and "saved weights of the checked file" in html
     if "wiring" in alone:
         assert "How the wiring was determined" in html and "ReLU follows" in html
     for note in alone.get("notes") or []:

@@ -9,10 +9,12 @@ from html import escape
 from pathlib import Path
 from typing import Optional
 
-from ._html import fmt, legend, loss_chart, page, plural, share, duration, table, tag, timeline, verdict
+from ._html import (duration, fmt, layer_html, legend, loss_chart, page, plural, share, table, tag, timeline,
+                    verdict)
 from .facts import COMMON, DISPLAY_SEVERITY, RunFacts, Stuck
 
 GROUPABLE = ("alarm", "alarm_cleared", "channels_cleared")
+FOLDED = ("skipped_step", "certificate_refused")       # every one in the run becomes a single row
 
 
 def describe(e: dict) -> str:
@@ -27,12 +29,17 @@ def describe(e: dict) -> str:
     if ev == "alarm_cleared":
         return "gradient back in its normal range"
     if ev == "channels":
+        # Stuck means proven dead, constant or decayed (weight-level facts); silent is reported apart.
         st = Stuck.from_event(e)
+        of = f" of {fmt(e.get('channels'))}" if e.get("channels") is not None else ""
         parts = [f"{n:,} {w}" for n, w in ((st.certified, "proven dead"), (st.constant, "constant"),
-                                            (st.decayed, "decayed to ~0"),
-                                            (st.silent, "silent for several checks")) if n]
-        of = f"{st.total:,} of {fmt(e.get('channels'))}" if e.get("channels") is not None else f"{st.total:,}"
-        return f"{of} channels stuck: " + (", ".join(parts) or str(e.get("level", "")))
+                                            (st.decayed, "decayed to ~0")) if n]
+        if st.exact:
+            return (f"{st.exact:,}{of} channels stuck: " + ", ".join(parts)
+                    + (f"; {st.silent:,} more silent for several checks (unproven)" if st.silent else ""))
+        if st.silent:
+            return f"{st.silent:,}{of} channels silent for several checks (unproven, not counted as stuck)"
+        return f"channel check: {e.get('level', 'no counts recorded')}"
     if ev == "channels_cleared":
         return "all channels active again"
     if ev == "certificate":
@@ -63,6 +70,13 @@ def describe(e: dict) -> str:
     if ev == "skipped_step":
         scale = f" (loss scale {fmt(e['scale'])})" if e.get("scale") is not None else ""
         return "optimizer step skipped by the mixed-precision scaler: non-finite gradients" + scale
+    if ev == "no_gradients":
+        return ("no watched layer had a gradient at this check, so gradient alarms could not run; "
+                "call mon.step() after loss.backward() and before optimizer.step()")
+    if ev == "certificate_refused":
+        bn = f" (BatchNorm {e['batchnorm']})" if e.get("batchnorm") else ""
+        return (f"{fmt(e.get('count'))} channels{bn} look dead from their weights but were not certified: "
+                f"{e.get('reason') or 'no reason recorded'}")
     return generic(e)
 
 
@@ -86,14 +100,15 @@ def severity(e: dict) -> str:
 
 def _groups(events: list[dict]) -> list[list[dict]]:
     """Fold runs of same-kind events at one check (8 alarms at step 450) into one row, and every
-    `skipped_step` of the run into a single row at the first one."""
+    `skipped_step` (or `certificate_refused`) of the run into a single row at the first one."""
     out: list[list[dict]] = []
-    skipped: list[dict] = []
+    folded: dict[str, list[dict]] = {}
     for e in events:
-        if e.get("event") == "skipped_step":
-            if not skipped:
-                out.append(skipped)
-            skipped.append(e)
+        if e.get("event") in FOLDED:
+            fold = folded.setdefault(str(e["event"]), [])
+            if not fold:
+                out.append(fold)
+            fold.append(e)
             continue
         if out and e.get("event") in GROUPABLE:
             p = out[-1][-1]
@@ -105,13 +120,13 @@ def _groups(events: list[dict]) -> list[list[dict]]:
     return out
 
 
-def _where(group: list[dict]) -> str:
-    layers = [str(e.get("layer")) for e in group if e.get("layer")]
+def _where(group: list[dict], kinds: dict[str, str]) -> str:
+    layers = list(dict.fromkeys(str(e.get("layer")) for e in group if e.get("layer")))
     if not layers:
         return "–"
     if len(layers) <= 3:
-        return "<br>".join(f"<span class='mono'>{escape(x)}</span>" for x in layers)
-    return (f"<span class='mono'>{escape(layers[0])}</span> and {len(layers) - 1} more"
+        return "<br>".join(layer_html(x, kinds.get(x)) for x in layers)
+    return (f"{layer_html(layers[0], kinds.get(layers[0]))} and {len(layers) - 1} more"
             f"<details><summary>all {len(layers)}</summary><span class='mono'>{escape(', '.join(layers))}</span>"
             f"</details>")
 
@@ -133,6 +148,11 @@ def _what(group: list[dict]) -> str:
         word = {"no_gradient": "gradient is exactly zero", "vanishing": "gradient collapsed",
                 "exploding": "gradient exploded"}.get(e.get("diagnosis"), str(e.get("diagnosis")))
         return f"{len(group)} layers: {escape(word)}"
+    if ev == "certificate_refused":
+        layers = {str(x.get("layer")) for x in group}
+        return (f"{len(group)} certificates refused in {plural(len(layers), 'layer')}: channels that look dead "
+                f"from their weights, where a condition of the proof did not hold (see <i>Why some layers "
+                f"could not be certified</i>)")
     if ev == "skipped_step":
         scales = [float(x["scale"]) for x in group if isinstance(x.get("scale"), (int, float))]
         rng = f"; loss scale {fmt(max(scales))} → {fmt(min(scales))}" if len(set(scales)) > 1 else ""
@@ -148,38 +168,66 @@ def _headline(f: RunFacts) -> tuple[str, str, str, str]:
     repairs = f.of("repair")
     certs = f.of("certificate")
     still = [ep for ep in f.episodes if ep.open_at_end]
+    cov = f.coverage
     detail = ""
     if certs:
         detail += ("<p>Proven dead: " + ", ".join(
-            f"<span class='mono'>{escape(str(e.get('layer')))}</span> ({fmt(e.get('count'))} channels, "
+            f"{layer_html(str(e.get('layer')), f.kind(e.get('layer')))} ({fmt(e.get('count'))} channels, "
             f"step {fmt(e.get('step'))})" for e in certs) + ".</p>")
     first = problems[0] if problems else None
     if first is not None:
-        where = first.get("layer") or ("the loss" if "loss" in str(first.get("event")) else "the run")
-        detail += (f"<p>First sign of trouble at step {fmt(first.get('step'))} in "
-                   f"<span class='mono'>{escape(str(where))}</span>: {escape(describe(first))}.</p>")
+        where = first.get("layer")
+        place = (layer_html(str(where), f.kind(where)) if where else
+                 escape("the loss" if "loss" in str(first.get("event")) else "the run"))
+        detail += (f"<p>First sign of trouble at step {fmt(first.get('step'))} in {place}: "
+                   f"{escape(describe(first))}.</p>")
+    if cov.state == "partial":
+        detail += (f"<p>{cov.without_gradients:,} of {fmt(cov.checks)} checks saw no gradient on any watched "
+                   f"layer" + (f" (first at step {cov.first_without:,})" if cov.first_without is not None else "")
+                   + "; gradient alarms could not run at those checks.</p>")
+    if f.silent_at_end:
+        items = sorted(f.silent_at_end.items(), key=lambda kv: (-kv[1], kv[0]))
+        detail += ("<p>Silent at the last check (no positive output for several checks; likely unused, not "
+                   "proven dead, not counted as stuck): " + ", ".join(
+                       f"{layer_html(k, f.kind(k))} {n:,}" for k, n in items[:8])
+                   + (f" and {len(items) - 8} more" if len(items) > 8 else "") + ".</p>")
     if not f.trust.intact:
         return "bad", "Record broken", f"The record fails its integrity check: {f.trust.message}", detail
     if crit:
         return ("bad", "Critical", f"Critical: {describe(crit[0])} at step {fmt(crit[0].get('step'))}",
                 detail)
+    if cov.state == "unknown":
+        return ("warn", "Unknown", "No check ran in this run, so nothing was measured",
+                "<p>The verdict is unknown, not healthy: the record holds no check.</p>")
+    if cov.state == "blind":
+        n = cov.checks or 0
+        where = "the only check" if n == 1 else f"any of the {n:,} checks"
+        return ("bad", "Not monitored", f"No gradients were seen at {where}; {cov.advice}",
+                f"<p>No watched layer had a <span class='mono'>.grad</span> at {where}, so gradient alarms "
+                f"never ran. {escape(cov.cause)} Weight-based channel checks are "
+                f"reported below as recorded.</p>" + detail)
     if still:
         layers = sorted({ep.layer for ep in still})
         return ("bad", "Stuck at end of run",
                 f"{plural(len(layers), 'layer')} still had stuck channels when the run ended"
                 + (f"; {plural(len(repairs), 'repair')} applied earlier" if repairs else ""), detail)
     if repairs:
-        return ("fixed", "Repaired",
-                f"{plural(len(repairs), 'repair')} applied ({fmt(sum(int(e.get('count') or 0) for e in repairs))} "
-                f"channels); no layer was stuck at the end of the run", detail)
+        head = (f"{plural(len(repairs), 'repair')} applied ({fmt(sum(int(e.get('count') or 0) for e in repairs))} "
+                f"channels); no channel was proven dead, constant or decayed at the end of the run")
+        if f.silent_at_end:
+            head += f"; {sum(f.silent_at_end.values()):,} channels silent at the last check (unproven)"
+        return "fixed", "Repaired", head, detail
     if problems:
         layers = sorted({str(e.get("layer")) for e in problems if e.get("layer")})
         head = (f"Warnings in {plural(len(layers), 'layer')}" if layers else "Warnings raised") + \
             ", nothing proven broken"
         return "warn", "Warnings", head, detail
+    if cov.state == "partial":
+        return ("warn", "Partly monitored", f"No problems found, but {cov.without_gradients:,} of "
+                f"{fmt(cov.checks)} checks saw no gradients", detail)
     checks = f.checks
     return ("ok", "Healthy", "No problems found" + (f" in {checks:,} checks" if checks else ""),
-            "<p>Every layer's gradient stayed within its own normal range and no channel got stuck.</p>")
+            "<p>Every layer's gradient stayed within its own normal range and no channel got stuck.</p>" + detail)
 
 
 def _stuck_section(f: RunFacts) -> str:
@@ -202,7 +250,7 @@ def _stuck_section(f: RunFacts) -> str:
             outcome = tag("action", f"repaired at step {ep.end:,}")
         else:
             outcome = tag("healthy", f"cleared by step {ep.end:,}")
-        rows.append([f"<span class='mono'>{escape(ep.layer)}</span>", f"{ep.start:,}",
+        rows.append([layer_html(ep.layer, f.kind(ep.layer)), f"{ep.start:,}",
                      "end" if ep.open_at_end else f"{ep.end:,}", f"{ep.steps:,}",
                      escape(duration(ep.seconds)), escape(kinds), outcome])
     total_line = (f"<p><b>{c.stuck_steps:,} of {c.total_steps:,} steps</b> ({share(c.stuck_steps, c.total_steps)}) "
@@ -234,7 +282,7 @@ def _lead_section(f: RunFacts) -> str:
             sig, lead = "none recorded in the window", "–"
         else:
             s = ld.signal
-            where = f"<span class='mono'>{escape(str(s.get('layer') or '–'))}</span>: "
+            where = (layer_html(str(s["layer"]), f.kind(s["layer"])) if s.get("layer") else "–") + ": "
             sig = where + escape(describe(s))
             if ld.n_signals > 1:
                 sig += f" <span class='sub small'>(+{ld.n_signals - 1} more in the window)</span>"
@@ -251,6 +299,29 @@ def _lead_section(f: RunFacts) -> str:
             f"An earlier signal is not proof that it caused the spike; it shows when the monitor "
             f"could first have told you something was off. Resolution is one check ({f.check_every:,} steps).</p>"
             + table(["Spike at step", "Loss", "Earliest earlier signal", "Lead"], rows, num=(0,)))
+
+
+def _refused_section(f: RunFacts) -> str:
+    """`certificate_refused` events, one row per layer and reason, with the steps they span."""
+    refused = f.of("certificate_refused")
+    if not refused:
+        return ""
+    groups: dict[tuple[str, str], list[dict]] = {}
+    for e in refused:
+        groups.setdefault((str(e.get("layer") or "–"), str(e.get("reason") or "no reason recorded")), []).append(e)
+    rows = []
+    for (layer, reason), es in groups.items():
+        counts = [int(e["count"]) for e in es if isinstance(e.get("count"), int)]
+        bn = next((str(e["batchnorm"]) for e in es if e.get("batchnorm")), None)
+        rows.append([_step_cell(es), layer_html(layer, f.kind(layer)) if layer != "–" else "–",
+                     f"<span class='mono'>{escape(bn)}</span>" if bn else "–",
+                     fmt(max(counts) if counts else None), escape(reason)])
+    return ("<h2>Why some layers could not be certified</h2>"
+            "<p>In these layers some channels look dead from their weights (zero filter or BatchNorm scale, "
+            "shift ≤ 0), but a condition of the proof did not hold, so the monitor issued no certificate "
+            "for them.</p>"
+            + table(["Steps", "Layer", "BatchNorm", "Channels (most at one check)", "Why not certified"], rows,
+                    num=(0, 3)))
 
 
 def _layer_rows(f: RunFacts) -> list[list[str]]:
@@ -281,13 +352,15 @@ def _layer_rows(f: RunFacts) -> list[list[str]]:
             status = tag("warning", "problem found")
         elif p is not None and p.silent:
             status = tag("info", "silent channels (unproven)")
+        elif f.has_metrics and not series:
+            status = tag("warning", "no gradient seen")
         else:
             status = tag("healthy", "healthy")
         peak = "–"
         if p is not None and p.total:
             peak = ", ".join(f"{n:,} {w}" for n, w in ((p.certified, "proven"), (p.constant, "constant"),
                                                         (p.decayed, "decayed"), (p.silent, "silent")) if n)
-        rows.append([f"<span class='mono'>{escape(name)}</span>", fmt(series[-1] if series else None),
+        rows.append([layer_html(name, f.kind(name)), fmt(series[-1] if series else None),
                      fmt(statistics.median(series) if series else None), escape(peak), status])
     return rows
 
@@ -432,7 +505,7 @@ def render(f: RunFacts) -> str:
                        list(f.cost.spans), f.config.max_chart_points)
     groups = _groups(f.shown)
     shown_groups = groups[:f.config.max_event_rows]
-    rows = [[_step_cell(g), _where(g), _what(g), tag(severity(g[0]))] for g in shown_groups]
+    rows = [[_step_cell(g), _where(g, f.kinds), _what(g), tag(severity(g[0]))] for g in shown_groups]
     more = "" if len(groups) <= len(shown_groups) else (
         f"<p class='sub'>{len(groups) - len(shown_groups):,} more rows not shown; every event is in "
         f"<span class='mono'>diary.jsonl</span>.</p>")
@@ -447,16 +520,19 @@ def render(f: RunFacts) -> str:
           "<a href='summary.html'>summary.html</a>.</p>"
         + _stuck_section(f)
         + (f"<h2>Loss</h2>{chart}{legend([m[1] for m in marks], bool(f.cost.spans))}"
-           f"<p class='sub small'>Hover a marker for details.</p>" if chart else
+           + ("<p class='sub small'>Hover a marker for details.</p>" if marks else "") if chart else
            ("<h2>Loss</h2><p class='sub'>No per-check loss values in this record "
             "(<span class='mono'>metrics.jsonl</span> is missing or has no loss).</p>"))
         + _lead_section(f)
+        + _refused_section(f)
         + (f"<h2>What happened</h2>{table(['Step', 'Where', 'What', ''], rows, num=(0,))}{more}" if rows else
-           "<h2>What happened</h2><p>Nothing to report: no alarms, stuck channels, loss spikes or repairs.</p>")
+           "<h2>What happened</h2><p>Nothing to report: no alarms, stuck channels, loss spikes or repairs."
+           + (" That is not evidence of health: without gradients no alarm could fire." if
+              f.coverage.state == "blind" else "") + "</p>")
         + ("<h2>Layers</h2>" + table(["Layer", "Gradient now", "Median over run", "Stuck channels (peak)",
                                       "Status"], layer_rows, num=(1, 2)) if layer_rows else "")
         + _setup_section(f) + _record_section(f) + _about())
-    return page(f"Training health report: {s.get('name', f.run_dir.name)}", body)
+    return page(f"Training health report: {s.get('name', f.run_dir.name)}", body, source="run")
 
 
 def write(f: RunFacts, path: Optional[Path] = None) -> Path:

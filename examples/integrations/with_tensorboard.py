@@ -2,10 +2,14 @@
 
     python examples/integrations/with_tensorboard.py [--logdir tb_runs/ormas]
     tensorboard --logdir tb_runs
+
+Each run logs to a fresh ``<logdir>/<timestamp>-<pid>`` subdirectory, so runs sit side by side in TensorBoard.
 """
 from __future__ import annotations
 
 import argparse
+import os
+import time
 
 import torch
 import torch.nn as nn
@@ -51,13 +55,14 @@ def main() -> None:
     ap.add_argument("--logdir", default="tb_runs/ormas")
     ap.add_argument("--out", default="ormas_runs/tensorboard")
     a = ap.parse_args()
+    logdir = os.path.join(a.logdir, f"{time.strftime('%Y%m%d-%H%M%S')}-{os.getpid()}")
     torch.manual_seed(0)
     model = SmallCNN()
     break_layer(model)
     opt = torch.optim.SGD(model.parameters(), lr=0.05, momentum=0.9)
     loader = torch.utils.data.DataLoader(synthetic(), batch_size=32, shuffle=True)
-    tb = TensorBoardSink(a.logdir, layers=["conv*", "bn*"])      # per-layer scalars for these only
-    with Monitor(model, opt, out=a.out, repair=True, check_every=10, verbose=False, sinks=[tb]) as mon:
+    tb = TensorBoardSink(logdir, layers=["conv*", "bn*"])      # per-layer scalars for these only
+    with Monitor(model, opt, out=a.out, overwrite=True, repair=True, check_every=10, verbose=False, sinks=[tb]) as mon:
         for _ in range(3):
             for x, y in loader:
                 loss = nn.functional.cross_entropy(model(x), y)
@@ -68,10 +73,10 @@ def main() -> None:
     tb.close()
 
     from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
-    acc = EventAccumulator(a.logdir)
+    acc = EventAccumulator(logdir)
     acc.Reload()
     tags = sorted(acc.Tags()["scalars"])
-    print(f"{len(tags)} scalar tags in {a.logdir}:")
+    print(f"{len(tags)} scalar tags in {logdir}:")
     for t in tags:
         vals = acc.Scalars(t)
         print(f"  {t}: {len(vals)} points, last {vals[-1].value:.4g} at step {vals[-1].step}")

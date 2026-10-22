@@ -1,0 +1,14 @@
+# Source distribution: the package, its full test suite (so the sdist can test itself) and the
+# small example scripts. Run outputs, sample reports and the docs site stay in the repository only.
+include README.md CHANGELOG.md LICENSE NOTICE CITATION.cff CONTRIBUTING.md SECURITY.md
+graft src
+graft tests
+graft examples
+prune sample_reports
+prune scan_results
+prune demo_runs
+prune ormas_demo
+prune docs
+prune .github
+exclude mkdocs.yml
+global-exclude __pycache__ *.py[cod] .DS_Store *.egg-info

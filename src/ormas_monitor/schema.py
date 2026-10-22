@@ -34,6 +34,14 @@ EVENT_FIELDS: dict[str, tuple[str, ...]] = {
     "channels": _CHANNEL_FIELDS,
     "channels_cleared": _CHANNEL_FIELDS,
     "certificate": ("step", "severity", "layer", "batchnorm", "channels", "count", "statement", "assumes"),
+    # Channels whose weights alone would be certified, but a condition of the certificate failed.
+    # Once per (layer, reason); `count` is how many candidate channels that reason refused.
+    "certificate_refused": ("step", "severity", "layer", "batchnorm", "count", "reason"),
+    # A sampled check found no .grad on any watched layer (step() before backward?). Once per run;
+    # run_end.counts.checks_without_gradients counts every such check.
+    "no_gradients": ("step", "severity", "message"),
+    # step() got a loss with more than one element; the monitor records its mean. Once per run.
+    "loss_reduced": ("step", "severity", "elements"),
     "repair": ("step", "severity", "layer", "batchnorm", "channels", "count", "method",
                "optimizer_slices_reset", "modification_class", "bound", "delta_norm",
                "weight_norm_before", "weight_norm_after", "relative_change", "rng"),
@@ -49,6 +57,9 @@ EVENT_FIELDS: dict[str, tuple[str, ...]] = {
 # Fields whose value is fixed for an event type.
 FIXED_VALUES: dict[str, dict[str, Any]] = {
     "certificate": {"severity": "proof"},
+    "certificate_refused": {"severity": "info"},
+    "no_gradients": {"severity": "warning"},
+    "loss_reduced": {"severity": "info"},
     "repair": {"severity": "action", "modification_class": "discrete", "bound": None},
     "nonfinite_loss": {"severity": "critical"},
     "nonfinite_gradient": {"severity": "critical"},

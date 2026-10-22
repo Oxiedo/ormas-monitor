@@ -27,6 +27,11 @@ Threat model, stated plainly:
   the key. A key held by a reviewer, who signs after inspecting the run, proves much more.
 - The record is evidence for technical documentation. It is never a compliance certificate.
 
+File safety: a run directory may come from someone else. `seal` and `sign` refuse a run whose
+record files are symbolic links or not regular files, and write each output through a new temporary
+file in the run directory (created with O_EXCL, and O_NOFOLLOW where the platform has it) that is
+then renamed over the target, so they never write through a link or outside the run directory.
+
 The format can be checked without this package: `shasum -a 256` for the files, and
 `openssl pkeyutl -verify -pubin -inkey public.pem -rawin -in record.json -sigfile record.sig`
 for the signature (OpenSSL 3).
@@ -36,13 +41,14 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import secrets
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from .chain import file_sha256, parse_lines
-from .layout import FORMAT, LAYOUT, RecordLayout
+from .layout import FORMAT, LAYOUT, RecordLayout, file_problem
 
 ALGORITHM = "Ed25519"
 INSTALL_HINT = "signing needs the optional 'cryptography' package: pip install 'ormas-monitor[signing]'"
@@ -113,11 +119,51 @@ def verify_signature(data: bytes, signature: bytes, public_key: Any) -> bool:
     return True
 
 
+_NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
+_BINARY = getattr(os, "O_BINARY", 0)
+
+
 def _write_exclusive(path: Path, data: bytes, mode: int) -> None:
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode)
+    """Create `path` (never an existing file, never through a symbolic link) holding `data`."""
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | _NOFOLLOW | _BINARY, mode)
     with os.fdopen(fd, "wb") as fh:
+        if hasattr(os, "fchmod"):
+            os.fchmod(fh.fileno(), mode)    # os.open's mode is filtered by the umask; set it exactly
         fh.write(data)
-    os.chmod(path, mode)        # os.open's mode is filtered by the umask; set it exactly
+    if not hasattr(os, "fchmod"):
+        os.chmod(path, mode)
+
+
+def _stage(directory: Path, name: str, data: bytes) -> Path:
+    """Write `data` to a new temporary file next to `directory / name` and return its path. The
+    file is created with O_EXCL (and O_NOFOLLOW), so nothing that already exists is written to."""
+    tmp = directory / f".{name}.{secrets.token_hex(8)}.tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | _NOFOLLOW | _BINARY, 0o666)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+            fh.flush()
+            os.fsync(fh.fileno())
+    except BaseException:
+        os.unlink(tmp)
+        raise
+    return tmp
+
+
+def _replace_all(directory: Path, outputs: list[tuple[str, bytes]]) -> list[Path]:
+    """Stage every output, then rename each over its target. A rename replaces a symbolic link
+    itself rather than the file it points to, so a link planted after the checks is not followed."""
+    staged: list[tuple[Path, Path]] = []
+    try:
+        for name, data in outputs:
+            staged.append((_stage(directory, name, data), directory / name))
+        for tmp, target in staged:
+            os.replace(tmp, target)
+    finally:
+        for tmp, _ in staged:
+            if os.path.lexists(tmp):
+                tmp.unlink()
+    return [target for _, target in staged]
 
 
 def keygen(private_path: str | Path, public_path: str | Path) -> KeyInfo:
@@ -129,7 +175,7 @@ def keygen(private_path: str | Path, public_path: str | Path) -> KeyInfo:
     if priv_p.resolve() == pub_p.resolve():
         raise ValueError("private and public key paths must differ")
     for p in (priv_p, pub_p):
-        if p.exists():
+        if os.path.lexists(p):
             raise FileExistsError(f"{p} already exists; refusing to overwrite a key")
     key = ed25519.Ed25519PrivateKey.generate()
     priv = key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
@@ -166,11 +212,16 @@ def build_seal(run_dir: str | Path, signer: str | None, layout: RecordLayout = L
 
 
 def _check_sealable(run: Path, layout: RecordLayout, resigning: bool) -> None:
-    """Fail closed: a record that does not verify completely is not sealed."""
+    """Fail closed: a record that does not verify completely, or whose files are links or not
+    regular files, is not sealed."""
     from .verify import verify_run
 
     if not run.is_dir():
         raise RecordError(f"{run} is not a run directory")
+    for name in (*layout.sealed_files, layout.seal, layout.signature):
+        problem = file_problem(run / name)
+        if problem is not None and problem != "missing":
+            raise RecordError(f"refusing to seal: {run / name} is {problem}")
     result = verify_run(run)
     problems = [c for c in result.checks if c.status == "fail" and c.name not in ("seal", "signature")]
     problems += [c for c in result.checks if c.status == "absent" and c.name not in ("seal", "signature")]
@@ -180,7 +231,7 @@ def _check_sealable(run: Path, layout: RecordLayout, resigning: bool) -> None:
     if result.check("seal").status == "fail":
         raise RecordError("refusing to re-seal: the existing record.json no longer matches the files "
                           f"({result.check('seal').message})")
-    if not resigning and (run / layout.signature).exists():
+    if not resigning and os.path.lexists(run / layout.signature):
         raise RecordError(f"{run / layout.signature} exists; re-sealing would invalidate it. Use sign().")
 
 
@@ -188,12 +239,12 @@ def seal(run_dir: str | Path, layout: RecordLayout = LAYOUT) -> Path:
     """Write record.json for a finished, intact run and return its path.
 
     Refuses (RecordError, nothing written) if any verification check fails, if the run has no
-    `run_end`, if an existing seal no longer matches the files, or if the run is already signed.
+    `run_end`, if an existing seal no longer matches the files, if the run is already signed, or if
+    any record file is a symbolic link or not a regular file.
     """
     run = Path(run_dir)
     _check_sealable(run, layout, resigning=False)
-    path = run / layout.seal
-    path.write_bytes(seal_bytes(build_seal(run, None, layout)))
+    (path,) = _replace_all(run, [(layout.seal, seal_bytes(build_seal(run, None, layout)))])
     return path
 
 
@@ -208,8 +259,5 @@ def sign(run_dir: str | Path, private_key_path: str | Path, layout: RecordLayout
     run = Path(run_dir)
     _check_sealable(run, layout, resigning=True)
     data = seal_bytes(build_seal(run, fingerprint(key.public_key()), layout))
-    sig = key.sign(data)
-    (run / layout.seal).write_bytes(data)
-    out = run / layout.signature
-    out.write_bytes(sig)
+    _, out = _replace_all(run, [(layout.seal, data), (layout.signature, key.sign(data))])
     return out

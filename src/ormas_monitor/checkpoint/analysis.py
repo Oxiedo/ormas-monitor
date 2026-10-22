@@ -31,8 +31,9 @@ NORM_SCALE_SUFFIXES = ("weight", "scale", "gamma")
 # Model families whose norms multiply by (1 + weight): a stored 0 there is a healthy scale of 1.
 ZERO_CENTRED_FAMILIES = ("gemma", "nemotron", "qwen3_next")
 SEVERITY_RANK = {"critical": 0, "warning": 1, "info": 2}
-KIND_RANK = ["nonfinite", "missing_tensors", "identical_weights", "newly_dead", "dead_channels",
-             "decayed_channels", "zero_tensor", "norm_scale_zero"]
+KIND_RANK = ["nonfinite", "missing_tensors", "arch_partial_match", "identical_weights", "newly_dead",
+             "dead_channels", "decayed_channels", "zero_tensor", "norm_scale_zero"]
+LAYER_KINDS = {2: "Linear", 3: "Conv1d", 4: "Conv2d", 5: "Conv3d"}    # weight rank -> module kind
 
 
 @dataclass(frozen=True)
@@ -42,6 +43,7 @@ class CheckConfig:
     chunk_elems: int = 1 << 22       # elements converted to float32 at a time (16 MB)
     max_listed: int = 64             # longest list of rows/entries kept per tensor in new findings
     collapsed_var: float = 1e-12     # BatchNorm running variance treated as "never varies"
+    arch_min_match: float = 0.5      # --arch must find this share of BatchNorms on both sides
 
 
 @dataclass(frozen=True)
@@ -114,6 +116,20 @@ def _groups(src: TensorSource) -> "OrderedDict[str, dict[str, str]]":
         prefix, _, suffix = name.rpartition(".")
         groups.setdefault(prefix, {})[suffix] = name
     return groups
+
+
+def _layer_kind(src: TensorSource, prefix: str) -> str | None:
+    """Conv2d, Linear, ... inferred from the rank of `prefix`.weight; None when unknown."""
+    info = src.info.get(f"{prefix}.weight")
+    return LAYER_KINDS.get(len(info.shape)) if info is not None else None
+
+
+def _where(src: TensorSource, prod: str | None, bn: str) -> str:
+    """'layer `3` (Conv2d, BatchNorm `4`)', or 'BatchNorm `4`' when no producer was found."""
+    if prod is None:
+        return f"BatchNorm `{bn}`"
+    kind = _layer_kind(src, prod)
+    return f"layer `{prod}` ({kind + ', ' if kind else ''}BatchNorm `{bn}`)"
 
 
 def batchnorm_names(src: TensorSource) -> list[str]:
@@ -271,16 +287,18 @@ def _batchnorm_pass(reader: _Reader, relu_after: set[str] | None, known: set[str
         exact = set(scan.certified) | set(scan.flat) | set(scan.decayed)
         dormant = [c for c in ((beta + 3 * gamma.abs()) <= 0).nonzero().flatten().tolist() if c not in exact]
         if not feeds:                      # output joins a skip connection first: no ReLU argument
-            scan.flat, scan.certified, scan.decayed, dormant = sorted(set(scan.flat) | set(scan.certified)), [], [], []
+            # No ReLU argument: dead-looking and decayed channels are reported as (near-)constant.
+            scan.flat, scan.certified, scan.decayed, dormant = sorted(set(scan.flat) | set(scan.certified) | set(scan.decayed)), [], [], []
         layers.append({"layer": prod or "(none found)", "batchnorm": bn, "channels": size,
                        "certified": scan.certified, "flat": scan.flat, "decayed": scan.decayed,
                        "dormant": dormant, "collapsed_var": collapsed,
                        "feeds_relu": feeds, "wiring": "traced" if traced else "heuristic"})
+        where = _where(src, prod, bn)
+        cond = "" if traced else f" if a ReLU directly follows `{bn}`"
         if scan.certified:
-            cond = "" if traced else f" if a ReLU follows {bn}"
             findings.append({
                 "severity": "warning", "kind": "dead_channels", "layer": prod, "batchnorm": bn,
-                "title": f"{len(scan.certified)}/{size} channels of {prod or bn} are dead for good{cond}",
+                "title": f"{len(scan.certified)} of {size} channels in {where} are dead for good{cond}",
                 "detail": "Their incoming filter or BatchNorm scale is exactly zero and the BatchNorm "
                           "shift is <= 0, so the output is a constant <= 0. A ReLU then closes for "
                           "every input and no gradient can ever reach them again (Theorem 2). "
@@ -288,33 +306,32 @@ def _batchnorm_pass(reader: _Reader, relu_after: set[str] | None, known: set[str
                           "before the ReLU.",
                 "channels": scan.certified})
         if scan.decayed:
-            cond = "" if traced else f" (if a ReLU follows {bn})"
             findings.append({
                 "severity": "warning", "kind": "decayed_channels", "layer": prod, "batchnorm": bn,
-                "title": f"{len(scan.decayed)}/{size} channels of {prod or bn} are effectively dead{cond}",
+                "title": f"{len(scan.decayed)} of {size} channels in {where} are effectively dead{cond}",
                 "detail": "Their filter or BatchNorm scale has shrunk to under 1e-5 of the layer's typical "
-                          "size and their shift is <= 0, so they output ~0 for every input. This is what a "
-                          "dead channel looks like after weight decay has been shrinking it for a while.",
+                          "size (or the filter is zero behind a nonzero bias, which BatchNorm cancels only up "
+                          "to rounding) and their shift is <= 0, so they output ~0 for every input. This is "
+                          "what a dead channel looks like after weight decay has been shrinking it for a while.",
                 "channels": scan.decayed})
         if scan.flat:
             findings.append({
                 "severity": "info", "kind": "flat_channels", "layer": prod, "batchnorm": bn,
-                "title": f"{len(scan.flat)}/{size} channels of {prod or bn} output a constant",
+                "title": f"{len(scan.flat)} of {size} channels in {where} output a constant",
                 "detail": "Their incoming filter or BatchNorm scale is exactly zero, so they output "
-                          "the same value for every input and carry no information.",
+                          "the same value (up to rounding) for every input and carry no information.",
                 "channels": scan.flat})
         if dormant:
             findings.append({
                 "severity": "info", "kind": "dormant_channels", "layer": prod, "batchnorm": bn,
-                "title": f"{len(dormant)}/{size} channels of {prod or bn} are probably dormant"
-                         + ("" if traced else f" (if a ReLU follows {bn})"),
+                "title": f"{len(dormant)} of {size} channels in {where} are probably dormant{cond}",
                 "detail": "BatchNorm shift <= -3 x |scale|: if a ReLU follows, these fire on under "
                           "~0.13% of positions when normalised inputs are roughly normal. An estimate, "
                           "not a proof.", "channels": dormant})
         if collapsed:
             findings.append({
                 "severity": "info", "kind": "collapsed_variance", "batchnorm": bn,
-                "title": f"{collapsed}/{size} channels of {bn} never vary (running variance ~0)",
+                "title": f"{collapsed} of {size} channels of BatchNorm `{bn}` never vary (running variance ~0)",
                 "detail": "Whatever reaches these channels is the same for every input, so they carry no "
                           "information. Usually a dead filter upstream.",
                 "channels": (var < cfg.collapsed_var).nonzero().flatten().tolist()})
@@ -335,7 +352,9 @@ def _unit_findings(reader: _Reader, paired: set[str]) -> list[dict]:
         if dead and len(dead) < info.shape[0]:
             findings.append({
                 "severity": "info", "kind": "zero_filters", "layer": prefix,
-                "title": f"{len(dead)}/{info.shape[0]} output units of {prefix} have all-zero weights",
+                "title": f"{len(dead)} of {info.shape[0]} output units of layer `{prefix}`"
+                         + (f" ({LAYER_KINDS[len(info.shape)]})" if len(info.shape) in LAYER_KINDS else "")
+                         + " have all-zero weights",
                 "detail": "Each outputs only its bias. Followed by a ReLU, those with bias <= 0 "
                           "never fire.", "channels": dead})
     return findings
@@ -427,7 +446,7 @@ def diff_findings(d: dict, against_name: str) -> list[dict]:
                     "tensors": d["unchanged"]})
     for e in d["embedding_rows_unchanged"]:
         out.append({"severity": "info", "kind": "embedding_rows_unchanged", "layer": e["tensor"],
-                    "title": f"{e['count']}/{e['size']} rows of {e['tensor']} never moved",
+                    "title": f"{e['count']} of {e['size']} rows of `{e['tensor']}` never moved",
                     "detail": "Each unchanged row is a token (or position) whose embedding received no update "
                               "between the checkpoints: typically tokens absent from the fine-tuning data. "
                               "Decoupled weight decay (AdamW) would move every row, so this also suggests it "

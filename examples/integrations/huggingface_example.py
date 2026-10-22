@@ -82,7 +82,7 @@ def main() -> None:
                              gradient_accumulation_steps=2, learning_rate=3e-3, report_to=[],
                              save_strategy="no", logging_steps=16, use_cpu=True, disable_tqdm=True,
                              dataloader_pin_memory=False, seed=0)
-    cb = OrmasMonitorCallback(repair=True, check_every=10)
+    cb = OrmasMonitorCallback(repair=True, check_every=10, overwrite=True)   # re-runs replace hf_out/ormas_run
     trainer = Trainer(model=model, args=args, train_dataset=Dicts(synthetic()), callbacks=[cb])
     trainer.train()
     print(f"optimizer steps {trainer.state.global_step}, monitor steps {cb.monitor.step_count}")

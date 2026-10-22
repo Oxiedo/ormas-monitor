@@ -10,13 +10,21 @@ from html import escape
 from pathlib import Path
 from typing import Any
 
-from ._html import fmt, page, table, tag, verdict
+from ._html import fmt, layer_html, page, table, tag, verdict
 
 KNOWN = {"a", "b", "same_architecture", "config_changes", "environment_changes", "events", "layers",
-         "worse", "better", "mixed", "verdict"}
-# (key, column title); counts are None for a layer that was not scanned, which renders as "–", not 0
+         "worse", "better", "mixed", "more_silent", "fewer_silent", "verdict", "verdict_detail"}
+# (key, column title); counts are None for a layer that was not scanned, which renders as "–", not 0.
+# Diff results that split stuck counts into proven (`proven_*`) and silent (`silent_*`) get the
+# split columns; older results, whose `peak_stuck` mixes both, get the original ones.
+SPLIT_PAIRS = (("alarms", "Alarms"), ("proven_peak", "Stuck (peak)"), ("proven_at_end", "Stuck at end"),
+               ("silent_at_end", "Silent at end"), ("certified", "Proven dead"),
+               ("channels_repaired", "Repaired"))
 LAYER_PAIRS = (("alarms", "Alarms"), ("peak_stuck", "Peak stuck"), ("stuck_at_end", "Stuck at end"),
                ("certified", "Proven dead"), ("repairs", "Repairs"), ("channels_repaired", "Channels repaired"))
+# The diff's own per-layer judgement (`health`, `silent_change`) -> the word in the Change column.
+HEALTH_WORD = {"worse": "worse in B", "better": "better in B", "mixed": "both ways"}
+SILENT_WORD = {"more": "more silent in B", "fewer": "fewer silent in B"}
 
 
 def _cell(v: Any) -> str:
@@ -58,22 +66,26 @@ def _run_card(label: str, r: dict) -> str:
             + "".join(f"<div class='small'>{k}: {v}</div>" for k, v in rows) + "</div>")
 
 
+def _detail(v: Any) -> str:
+    """`verdict_detail`: a string, or a list of sentences rendered as a list."""
+    if not v:
+        return ""
+    if isinstance(v, (list, tuple)):
+        return "<ul>" + "".join(f"<li>{escape(str(x))}</li>" for x in v) + "</ul>"
+    return f"<p>{escape(str(v))}</p>"
+
+
 def render(d: dict) -> str:
     """The run comparison as one HTML document."""
     a, b = d.get("a") or {}, d.get("b") or {}
     broken = [x for x, r in (("A", a), ("B", b)) if r.get("intact") is False]
     same = d.get("same_architecture")
     worse, better, mixed = (list(d.get(k) or []) for k in ("worse", "better", "mixed"))
-    if broken:
-        cls, status = "bad", "Record failed verification"
-    elif worse or mixed:
-        cls, status = "warn", "Run B less healthy in some layers"
-    elif better:
-        cls, status = "ok", "Run B healthier"
-    else:
-        cls, status = "ok", "No change in layer health"
+    # The headline is the diff's own verdict: this page never computes a second, possibly
+    # contradictory one. Only a failed record check changes the box's colour.
+    cls, status = ("bad", "Record failed verification") if broken else ("neutral", "Comparison")
     head = str(d.get("verdict") or "Two runs compared.")
-    more = ""
+    more = _detail(d.get("verdict_detail"))
     if broken:
         more += f"<p>The record of run {' and '.join(broken)} fails verification; its numbers are unconfirmed.</p>"
     if same is False:
@@ -88,17 +100,24 @@ def render(d: dict) -> str:
     direction = {**{n: "worse in B" for n in worse}, **{n: "better in B" for n in better},
                  **{n: "both ways" for n in mixed}}
     sev = {"worse in B": "warning", "better in B": "healthy", "both ways": "warning"}
+    layers = list(d.get("layers") or [])
+    split = any("proven_at_end_a" in l or "proven_at_end_b" in l for l in layers)
+    pairs = list(SPLIT_PAIRS if split else LAYER_PAIRS)
     lrows: list[tuple[bool, list[str]]] = []
-    for l in d.get("layers") or []:
+    for l in layers:
         name = str(l.get("layer"))
-        if l.get("in_a") and l.get("in_b"):
-            word = direction.get(name, "changed" if l.get("changed") else "same")
-        else:
+        if not (l.get("in_a") and l.get("in_b")):
             word = "only in A" if l.get("in_a") else "only in B"
+        elif l.get("health") in HEALTH_WORD:
+            word = HEALTH_WORD[l["health"]]
+        elif l.get("silent_change") in SILENT_WORD:
+            word = SILENT_WORD[l["silent_change"]]
+        else:
+            word = direction.get(name, "changed" if l.get("changed") else "same")
         diag = _pair(l.get("diagnoses_a"), l.get("diagnoses_b"))
         changed = bool(l.get("changed")) if "changed" in l else word != "same"
-        lrows.append((changed, [f"<span class='mono'>{escape(name)}</span>", tag(sev.get(word, "info"), word)]
-                      + [_pair(l.get(f"{k}_a"), l.get(f"{k}_b")) for k, _ in LAYER_PAIRS] + [diag]))
+        lrows.append((changed, [layer_html(name, l.get("kind")), tag(sev.get(word, "info"), word)]
+                      + [_pair(l.get(f"{k}_a"), l.get(f"{k}_b")) for k, _ in pairs] + [diag]))
     n_changed = sum(1 for c, _ in lrows if c)
     rows = [r for c, r in lrows if c] + [r for c, r in lrows if not c]
     extra = {k: v for k, v in d.items() if k not in KNOWN}
@@ -114,8 +133,11 @@ def render(d: dict) -> str:
             + ((f"<p>{n_changed:,} of {len(rows):,} layers differ between the runs"
                 + (" (listed first). Cells read A → B; – means not scanned or not recorded, which is not 0.</p>"
                    if n_changed else ".</p>")
-                + table(["Layer", "Change"] + [f"{t}" for _, t in LAYER_PAIRS] + ["Alarm kinds"], rows,
-                        num=tuple(range(2, 2 + len(LAYER_PAIRS)))))
+                + ("<p class='sub small'>Stuck: proven dead, constant or decayed to ~0, read from the weights. "
+                   "Silent: no positive output for several checks; likely unused, not proven dead, and never "
+                   "counted as stuck.</p>" if split else "")
+                + table(["Layer", "Change"] + [t for _, t in pairs] + ["Alarm kinds"], rows,
+                        num=tuple(range(2, 2 + len(pairs)))))
                if rows else "<p>No per-layer data.</p>")
             + "<h2>Events</h2>"
             + (table(["Event", "Run A → Run B"], ev, num=(1,)) if ev else "<p>No events to compare.</p>")
@@ -123,7 +145,7 @@ def render(d: dict) -> str:
                if extra else "")
             + "<p class='sub small'>A comparison of two records, not of two models' quality: it shows what "
               "each monitor saw and did, not which model is better.</p>")
-    return page(f"Run comparison: {a.get('name') or 'A'} vs {b.get('name') or 'B'}", body)
+    return page(f"Run comparison: {a.get('name') or 'A'} vs {b.get('name') or 'B'}", body, source="diff")
 
 
 def write(diff_result: dict, path: str | Path) -> Path:

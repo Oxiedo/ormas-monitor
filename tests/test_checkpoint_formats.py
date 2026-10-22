@@ -20,10 +20,11 @@ def small_cnn() -> nn.Sequential:
 
 
 def lesioned() -> dict:
-    """small_cnn with conv '3' zeroed and its BatchNorm shift <= 0: 16 certified-dead channels."""
+    """small_cnn, conv '3' (filter and bias) zeroed, its BatchNorm shift <= 0: 16 certified-dead channels."""
     m = small_cnn()
     with torch.no_grad():
         m[3].weight.zero_()
+        m[3].bias.zero_()
         m[4].bias.fill_(-0.1)
     return m.state_dict()
 

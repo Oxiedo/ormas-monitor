@@ -8,7 +8,7 @@ from ormas_monitor import Monitor
 from ormas_monitor.checkpoint import run as check_file
 from ormas_monitor.cli import main as cli
 from ormas_monitor.diary import Diary, verify
-from ormas_monitor.structure import pair_by_order, scan_channels
+from ormas_monitor.structure import scan_channels
 from test_core_helpers import events as read_events
 
 
@@ -72,10 +72,14 @@ def test_scan_channels():
     assert s.certified == [1] and s.flat == [2]
 
 
-def test_pairing():
-    kinds = {"a": "Conv2d", "b": "BatchNorm2d", "c": "Linear", "d": "BatchNorm1d"}
-    sizes = {"a": 8, "b": 8, "c": 4, "d": 5}
-    assert pair_by_order(list("abcd"), kinds, sizes) == {"a": "b"}
+def test_pairing(tmp_path):
+    """BatchNorm is paired with the layer whose output it receives (dataflow, not run order)."""
+    model = small_cnn()
+    mon = Monitor(model, out=tmp_path / "run", check_every=1, verbose=False)
+    model(torch.randn(2, 3, 8, 8)).sum().backward()
+    mon.step()
+    mon.close(report=False)
+    assert mon.pairs == {"0": "1", "3": "4"}
 
 
 def test_diary_chain(tmp_path):
@@ -187,6 +191,7 @@ def test_checkpoint_respects_structure(tmp_path):
     model = Residual()
     with torch.no_grad():
         model.conv.weight.zero_()
+        model.conv.bias.zero_()          # exactly constant (a nonzero bias is only nearly so)
         model.bn.bias.fill_(-1.0)
     res = check(model.state_dict(), relu_after=set())
     assert not [f for f in res["findings"] if f["kind"] == "dead_channels"]

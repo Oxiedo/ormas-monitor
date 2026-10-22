@@ -9,7 +9,7 @@ from html import escape
 from pathlib import Path
 from typing import Any
 
-from ._html import LABEL, fmt, page, plural, table, tag, verdict
+from ._html import LABEL, code_spans, fmt, page, plural, table, tag, verdict
 
 LAYER_COLS = (("certified", "Proven dead*"), ("flat", "Constant"), ("decayed", "Decayed to ~0"),
               ("dormant", "Dormant†"))
@@ -93,7 +93,7 @@ def _finding(x: dict) -> str:
                   + "".join(f"<p><b>{escape(str(k))}</b>: {_value(v)}</p>" for k, v in more.items())
                   + "</details>")
     return (f"<div class='finding f-{escape(sev)}'>{tag(sev if sev in LABEL else 'info', LABEL.get(sev, sev.title()))} "
-            f"<b>{escape(str(title))}</b><p>{escape(str(x.get('detail', '')))}</p>{extra}</div>")
+            f"<b>{code_spans(str(title))}</b><p>{code_spans(str(x.get('detail', '')))}</p>{extra}</div>")
 
 
 def _diff_section(result: dict) -> str:
@@ -143,7 +143,7 @@ def render(result: dict) -> str:
     crit = [x for x in f if x.get("severity") == "critical"]
     warn = [x for x in f if x.get("severity") == "warning"]
     if crit:
-        cls, status, head = "bad", "Critical", str(crit[0].get("title", "critical finding"))
+        cls, status, head = "bad", "Critical", str(crit[0].get("title", "critical finding")).replace("`", "")
     elif warn:
         cls, status, head = "warn", "Problems found", f"{plural(len(warn), 'problem')} found in the weights"
     else:
@@ -182,7 +182,8 @@ def render(result: dict) -> str:
                "<p class='sub small'>* Proven dead when a ReLU directly follows the BatchNorm. "
                "† Estimated, not proven: shift ≤ −3×|scale|.</p>" if layers else "")
             + _diff_section(result))
-    return page(f"Checkpoint health report: {Path(str(result.get('file', 'checkpoint'))).name}", body)
+    name = Path(str(result.get("file", "checkpoint"))).name
+    return page(f"Checkpoint health report: {name}", body, source="check")
 
 
 def write(result: dict, path: str | Path) -> Path:

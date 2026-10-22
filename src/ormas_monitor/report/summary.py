@@ -12,7 +12,7 @@ from html import escape
 from pathlib import Path
 from typing import Optional
 
-from ._html import duration, legend, page, plural, share, timeline, verdict
+from ._html import code_spans, duration, layer_text, legend, page, plural, share, timeline, verdict
 from .facts import RunFacts
 
 NOT_TOLD = (
@@ -33,6 +33,8 @@ GLOSSARY = {
     "channel": ("Channel", "One small unit inside a layer. A layer has tens to thousands of them."),
     "stuck": ("Stuck", "A channel that, judging from its weights, outputs nothing useful: proven dead, "
                        "a constant, or shrunk to almost zero."),
+    "silent": ("Silent", "A channel that gave no positive output for several checks in a row. Often "
+                         "normal; it is not proof that the channel is dead, and it is not counted as stuck."),
     "proven": ("Proven dead", "A mathematical certificate that a channel can never learn again on its "
                               "own, however long training continues."),
     "repair": ("Repair", "Resetting stuck channels to fresh starting values so training can use them "
@@ -63,12 +65,6 @@ class Summary:
     trust: str
     not_told: tuple[str, ...]
     glossary: list[tuple[str, str]] = field(default_factory=list)
-
-
-def _names(layers: list[str], limit: int = 4) -> str:
-    if len(layers) <= limit:
-        return " and ".join([", ".join(layers[:-1]), layers[-1]]) if len(layers) > 1 else layers[0]
-    return ", ".join(layers[:limit]) + f" and {len(layers) - limit} more"
 
 
 def _trust_sentence(f: RunFacts) -> str:
@@ -112,13 +108,53 @@ def _money(x: float) -> str:
     return "under $0.01" if 0 < x < 0.01 else f"about ${x:,.2f}"
 
 
+def _tick(f: RunFacts, layer: str) -> str:
+    """'`3` (Conv2d)': a layer name in backticks, with its module type when recorded."""
+    kind = f.kind(layer)
+    return f"`{layer}`" + (f" ({kind})" if kind else "")
+
+
+def _lname(f: RunFacts, layer: str) -> str:
+    """'layer `3` (Conv2d)'."""
+    return layer_text(str(layer), f.kind(layer))
+
+
+def _layers(f: RunFacts, layers: list[str], limit: int = 4) -> str:
+    """'layer `3` (Conv2d)' or '2 layers, `conv2.0` (Conv2d) and `conv3.0` (Conv2d)'."""
+    if len(layers) == 1:
+        return _lname(f, layers[0])
+    named = [_tick(f, x) for x in layers[:limit]]
+    rest = f" and {len(layers) - limit:,} more" if len(layers) > limit else ""
+    listed = (", ".join(named) + rest) if rest else " and ".join([", ".join(named[:-1]), named[-1]])
+    return f"{len(layers):,} layers, {listed}"
+
+
+def _silent_sentence(f: RunFacts) -> str:
+    """Channels still silent in the last recorded state, named, and said to be unproven."""
+    se = f.silent_at_end
+    if not se:
+        return ""
+    items = sorted(se.items(), key=lambda kv: (-kv[1], kv[0]))
+    n = sum(se.values())
+    if len(items) == 1:
+        where = f"in {_lname(f, items[0][0])}"
+    else:
+        shown = ", ".join(f"{c:,} in {_tick(f, k)}" for k, c in items[:4])
+        where = f"in {len(items):,} layers ({shown}{' and more' if len(items) > 4 else ''})"
+    at = f" (step {f.last_check:,})" if f.last_check is not None else ""
+    return (f"At the last check{at}, {n:,} channels {where} were silent: no positive output for several "
+            f"checks in a row. They are likely unused, not proven dead, and are not counted as stuck.")
+
+
 def build(f: RunFacts) -> Summary:
-    """Turn the run's facts into the summary text."""
+    """Turn the run's facts into the summary text. Every sentence must be exactly true of the record."""
     s = f.start
     c = f.cost
+    cov = f.coverage
     used = {"layer", "channel", "record"}
     certs = f.of("certificate")
     repairs = f.of("repair")
+    refused = f.of("certificate_refused")
     crit = [e for e in f.shown if e.get("severity") == "critical"]
     alarms = f.of("alarm")
     spikes = f.of("loss_spike")
@@ -128,7 +164,11 @@ def build(f: RunFacts) -> Summary:
     proven_channels = sum(int(e.get("count") or 0) for e in certs)
     fixed_channels = sum(int(e.get("count") or 0) for e in repairs)
     first_stuck = min((ep.start for ep in eps), default=None)
+    last_stuck = max((ep.end for ep in eps), default=None)
     every = f"every {f.check_every:,} steps"
+    n_checks = cov.checks or 0
+    at_checks = "the only check" if n_checks == 1 else f"any of the {n_checks:,} checks"
+    silent = _silent_sentence(f)
 
     # ---- headline
     if not f.trust.intact:
@@ -138,44 +178,85 @@ def build(f: RunFacts) -> Summary:
         tone, status = "bad", "Training broke"
         headline = (f"Training broke at step {int(crit[0].get('step', 0)):,}: it produced invalid numbers "
                     f"(not-a-number or infinity).")
+    elif cov.state == "unknown":
+        tone, status = "warn", "Unknown"
+        headline = "The monitor made no check during this run, so it cannot say whether training was healthy."
+    elif cov.state == "blind":
+        tone, status = "bad", "Not monitored"
+        headline = f"No gradients were seen at {at_checks}; {cov.advice}."
     elif still:
         tone, status = "bad", "Problem, not repaired"
         headline = (f"Part of the model stopped learning (detected at step {first_stuck:,}) and was still "
                     f"stuck when the run ended.")
     elif eps and repairs:
         tone, status = "fixed", "Problem found and repaired"
-        headline = (f"Part of the model stopped learning (detected at step {first_stuck:,}); the monitor repaired it at "
-                    f"step {int(repairs[0]['step']):,}, and no part was stuck after that.")
+        headline = (f"Part of the model stopped learning (detected at step {first_stuck:,}); the monitor "
+                    f"repaired {fixed_channels:,} channels by step {max(int(e['step']) for e in repairs):,}.")
+        later = f.later_checks(last_stuck)
+        if later:
+            headline += (f" After step {last_stuck:,}, no check found a channel proven dead, constant or "
+                         f"decayed to ~0.")
+        elif later == 0:
+            headline += " No check ran after that, so the repair's effect is not confirmed by the record."
+        if f.silent_at_end:
+            headline += (f" {sum(f.silent_at_end.values()):,} channels were still silent at the end "
+                         f"(likely unused, not proven dead).")
     elif eps:
         tone, status = "warn", "Problem, cleared"
-        last = max(ep.end for ep in eps)
-        headline = f"Part of the model was stuck from step {first_stuck:,} until step {last:,}, then recovered."
+        headline = (f"Part of the model was stuck from step {first_stuck:,} until step {last_stuck:,}, "
+                    f"then recovered.")
     elif alarms or spikes or f.silent_peaks or any(e.get("event") == "sink_error" for e in f.shown):
         tone, status = "warn", "Warnings only"
         headline = "Nothing was proven broken, but the monitor raised warnings worth a look."
+    elif cov.state == "partial":
+        tone, status = "warn", "Partly monitored"
+        headline = (f"No problems found, but {cov.without_gradients:,} of {n_checks:,} checks saw no "
+                    f"gradients, so learning was not watched at those checks.")
     else:
         tone, status = "ok", "Healthy"
         headline = f"No problems found in {f.total_steps:,} training steps."
 
     # ---- what happened
-    p = [f"The monitor checked the model {every} over {f.total_steps:,} training steps"
-         + (f" ({duration(c.total_seconds)})." if c.total_seconds is not None else ".")]
+    if cov.state == "unknown":
+        p = [f"The monitor was set to check the model {every}, but no check ran in the "
+             f"{f.total_steps:,} training steps recorded, so nothing was measured."]
+    else:
+        p = [f"The monitor checked the model {every} over {f.total_steps:,} training steps"
+             + (f" ({duration(c.total_seconds)})." if c.total_seconds is not None else ".")]
+    if cov.state == "blind":
+        weights = any(r.get("stuck") for r in f.metrics)
+        p.append(f"No watched layer had a gradient at {at_checks}, so the warnings about each layer's "
+                 f"learning signal could not work. {cov.cause}"
+                 + (" The checks that read the weights still ran." if weights else ""))
+    elif cov.state == "partial":
+        p.append(f"{cov.without_gradients:,} of {n_checks:,} checks found no gradient on any watched layer"
+                 + (f" (first at step {cov.first_without:,})" if cov.first_without is not None else "")
+                 + ", so the learning-signal warnings could not run at those checks.")
     if crit:
         p.append(f"At step {int(crit[0].get('step', 0)):,} the training produced invalid numbers, which "
                  f"stops normal learning.")
     if eps:
-        n = len(stuck_layers)
-        p.append(f"At step {first_stuck:,} it found {plural(n, 'layer')} ({_names(stuck_layers)}) with stuck "
-                 f"channels" + (f"; {proven_channels:,} channels were proven dead, meaning they could never "
-                                f"learn again on their own." if proven_channels else "."))
+        p.append(f"At step {first_stuck:,} it found stuck channels in {_layers(f, stuck_layers)}"
+                 + (f"; {proven_channels:,} channels were proven dead, meaning they could never "
+                    f"learn again on their own." if proven_channels else "."))
         used |= {"stuck"} | ({"proven"} if proven_channels else set())
         if still:
-            p.append("They were still stuck when the run ended." if len(still) == len(eps) or
-                     {ep.layer for ep in still} == set(stuck_layers) else
-                     f"{plural(len({ep.layer for ep in still}), 'layer')} "
-                     f"({_names(sorted({ep.layer for ep in still}))}) were still stuck when the run ended.")
+            p.append("They were still stuck when the run ended." if {ep.layer for ep in still} == set(stuck_layers)
+                     else f"When the run ended, {_layers(f, sorted({ep.layer for ep in still}))} still had "
+                          f"stuck channels.")
         else:
-            p.append(f"By step {max(ep.end for ep in eps):,} no layer was stuck any more.")
+            fixed = sum(1 for ep in eps if ep.repaired)
+            how = ("had been repaired" if fixed == len(eps) else "had recovered" if not fixed
+                   else "had been repaired or had recovered")
+            p.append(f"By step {last_stuck:,} those channels {how}.")
+    if silent:
+        p.append(silent)
+        used.add("silent")
+    if refused:
+        rl = sorted({str(e.get("layer")) for e in refused if e.get("layer")})
+        p.append(f"In {_layers(f, rl) if rl else 'some layers'}, channels looked dead from their weights, but "
+                 f"a condition of the proof did not hold, so no proof was issued (the engineer report gives "
+                 f"the reason).")
     if spikes:
         p.append(f"The training loss (the error the model is trained to reduce) jumped "
                  f"{_times(len(spikes))}, first at step {int(spikes[0]['step']):,}.")
@@ -184,11 +265,12 @@ def build(f: RunFacts) -> Summary:
         p.append(f"The learning signal of {plural(len(al), 'layer')} fell to zero or moved far outside its "
                  f"own normal range ({plural(len(alarms), 'warning')}, first at step {int(alarms[0]['step']):,}).")
         used.add("alarm")
-    if f.silent_peaks and not eps:
+    if f.silent_peaks and not eps and not silent:
         layer, n = max(f.silent_peaks.items(), key=lambda kv: kv[1])
         p.append(f"In {plural(len(f.silent_peaks), 'layer')} some channels gave no output for several checks "
-                 f"in a row (up to {n:,} in {layer}). They may be inactive, but this is not proven, and some "
-                 f"inactive channels are normal in a healthy network.")
+                 f"in a row (up to {n:,} in {_lname(f, layer)}). They may be inactive, but this is not "
+                 f"proven, and some inactive channels are normal in a healthy network.")
+        used.add("silent")
     sink_errors = [e for e in f.shown if e.get("event") == "sink_error"]
     if sink_errors:
         p.append(f"{plural(len(sink_errors), 'output plug-in')} failed and "
@@ -224,6 +306,11 @@ def build(f: RunFacts) -> Summary:
             estimate = (f"ESTIMATE: {_money(d)} of compute. Formula: {c.stuck_seconds / 3600:.3f} h stuck "
                         f"× {g} GPU{'s' if g != 1 else ''}{assumed} × ${c.inputs.gpu_hour_cost:,.2f} per "
                         f"GPU-hour. Built from your price inputs, not measured.")
+    elif cov.state == "unknown":
+        cost_lines.append("Unknown: no check ran, so nothing was measured.")
+    elif cov.state == "blind":
+        cost_lines.append("Not established: the checks that read the weights found no part of the model stuck, "
+                          "but without gradients the monitor saw only part of the picture.")
     else:
         cost_lines.append("Nothing measurable: at no check was any part of the model stuck.")
         if c.dollars(c.total_seconds) is not None:
@@ -246,9 +333,16 @@ def build(f: RunFacts) -> Summary:
             done += " No limit was enforced on how much a repair could change the layer."
         cleared = [ep for ep in eps if not ep.open_at_end and ep.repaired]
         if cleared and not still:
-            done += " No layer was stuck at the end of the run."
+            done += " At the end of the run no channel was proven dead, constant or decayed to ~0."
         elif still:
             done += f" {plural(len({ep.layer for ep in still}), 'layer')} still had stuck channels at the end."
+        if f.silent_at_end and f.repair_mode != "all":
+            done += (" Silent channels are left alone in this mode; repair=\"all\" would reset them too.")
+    elif cov.state == "unknown":
+        done = "Nothing: no check ran."
+    elif cov.state == "blind" and not (eps or crit):
+        done = ("Nothing. Without gradients the monitor could not watch learning in this run; fix the call "
+                "order and run again.")
     elif f.watch_only and (eps or crit):
         done = ("Nothing. The monitor ran in watch-only mode: it recorded the problem but did not change the "
                 "model. With repair switched on it re-initialises stuck channels automatically.")
@@ -264,7 +358,7 @@ def build(f: RunFacts) -> Summary:
     when = time.strftime("%Y-%m-%d %H:%M", time.localtime(s["time"])) if s.get("time") else "date unknown"
     meta = " · ".join(str(x) for x in (s.get("model"), when,
                                         "repair on" if f.repair_mode else "watch-only mode") if x)
-    order = ["layer", "channel", "stuck", "proven", "alarm", "repair", "record", "signature"]
+    order = ["layer", "channel", "stuck", "proven", "silent", "alarm", "repair", "record", "signature"]
     return Summary(title=str(s.get("name", f.run_dir.name)), meta=meta, status=status, tone=tone,
                    headline=headline, happened=" ".join(p), cost_lines=cost_lines, cost_note=note,
                    estimate=estimate, done=done, trust=_trust_sentence(f), not_told=NOT_TOLD,
@@ -285,13 +379,13 @@ def render_html(sm: Summary, f: RunFacts) -> str:
         "<p class='eyebrow'>Training run summary · for decision-makers</p>"
         f"<h1>{escape(sm.title)}</h1><p class='sub'>{escape(sm.meta)}</p>"
         + verdict(sm.tone, sm.status, sm.headline)
-        + f"<h2>What happened</h2><p>{escape(sm.happened)}</p>"
+        + f"<h2>What happened</h2><p>{code_spans(sm.happened)}</p>"
         + "<h2>What it cost</h2>"
-        + "".join(f"<p>{escape(x)}</p>" for x in sm.cost_lines) + bar
+        + "".join(f"<p>{code_spans(x)}</p>" for x in sm.cost_lines) + bar
         + (f"<p class='sub small'>{escape(sm.cost_note)}</p>" if sm.cost_note else "")
         + (f"<div class='estimate'><span class='label'>ESTIMATE</span> {escape(sm.estimate[len('ESTIMATE: '):])}</div>"
            if sm.estimate else "")
-        + f"<h2>What was done</h2><p>{escape(sm.done)}</p>"
+        + f"<h2>What was done</h2><p>{code_spans(sm.done)}</p>"
         + f"<h2>Can you trust this record?</h2><p>{escape(sm.trust)}</p>"
         + "<div class='box'><h3>What this report does not tell you</h3><ul>"
         + "".join(f"<li>{escape(x)}</li>" for x in sm.not_told) + "</ul></div>"
@@ -300,7 +394,7 @@ def render_html(sm: Summary, f: RunFacts) -> str:
         + "<p class='sub small'>The technical detail behind every sentence is in "
           "<a href='report.html'>report.html</a> (engineer report) and in the record itself, "
           "<span class='mono'>diary.jsonl</span>.</p>")
-    return page(f"Run summary: {sm.title}", body, narrow=True)
+    return page(f"Run summary: {sm.title}", body, narrow=True, source="run")
 
 
 def render_md(sm: Summary) -> str:

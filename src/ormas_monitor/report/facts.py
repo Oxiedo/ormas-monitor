@@ -17,6 +17,9 @@ Definitions the reports rely on:
 * **Wall-clock**: timestamps of diary events, linearly interpolated between the nearest
   events on either side. Exact when an interval starts and ends on recorded events (the usual
   case: a `channels` event starts it; a `repair`, `channels_cleared` or `run_end` ends it).
+* **Coverage**: a check "saw gradients" when at least one watched layer had a `.grad`. A run
+  whose checks never saw one (typically `mon.step()` called before `loss.backward()`) was not
+  monitored for learning, whatever else its record says; a run with no check at all is unknown.
 * **Lead time**: for each loss spike, the earliest `alarm`, `channels` or `certificate` event
   in the window before it. An earlier signal is not evidence that it caused the spike.
 """
@@ -36,7 +39,8 @@ COMMON = ("seq", "time", "event", "prev", "hash")
 SIGNAL_EVENTS = ("alarm", "channels", "certificate")
 HIDDEN_EVENTS = ("run_start", "run_end", "structure", "manifest")
 DISPLAY_SEVERITY = {"sink_error": "warning", "skipped_step": "info", "loss_recovered": "info",
-                    "alarm_cleared": "info", "channels_cleared": "info"}
+                    "alarm_cleared": "info", "channels_cleared": "info", "no_gradients": "warning",
+                    "certificate_refused": "info"}
 
 
 @dataclass(frozen=True)
@@ -175,6 +179,44 @@ class Lead:
 
 
 @dataclass(frozen=True)
+class Coverage:
+    """What the monitor could actually see. `None` means the record cannot say (older records)."""
+
+    checks: Optional[int]                   # sampled checks, from run_end or the metrics rows
+    without_gradients: Optional[int]        # checks at which no watched layer had a gradient
+    gradients_seen: Optional[bool]          # at least one check saw a gradient
+    first_without: Optional[int]            # step of the first check without gradients
+    monitored_layers: Optional[int]         # layers the manifest says were watched
+
+    @property
+    def state(self) -> str:
+        """'unknown' (no check ran), 'blind' (no gradient ever seen), 'partial' (some checks saw
+        none), 'full' (every check saw gradients) or 'unstated' (the record cannot tell)."""
+        if self.checks == 0:
+            return "unknown"
+        if self.gradients_seen is False:
+            return "blind"
+        if self.without_gradients:
+            return "partial"
+        return "full" if self.gradients_seen else "unstated"
+
+    @property
+    def advice(self) -> str:
+        """The fix, in a few words, for a headline."""
+        if self.monitored_layers == 0:
+            return "no layer was watched (the layer filter matched nothing)"
+        return "call mon.step() after loss.backward()"
+
+    @property
+    def cause(self) -> str:
+        """The likely reason no gradients were seen, and the fix, as one sentence."""
+        if self.monitored_layers == 0:
+            return "No layer was watched: the layer filter matched nothing."
+        return ("The usual cause is calling mon.step() before loss.backward() (or after "
+                "optimizer.zero_grad()); call it after loss.backward() and before optimizer.step().")
+
+
+@dataclass(frozen=True)
 class Trust:
     """Can the record be trusted? Statuses follow `record.verify`: pass, fail, absent, unchecked,
     skipped; `None` means this install could not run that check at all."""
@@ -225,6 +267,19 @@ class RunFacts:
     trust: Trust
     time_at: Callable[[int], Optional[float]]
     config: ReportConfig
+    coverage: Coverage
+    silent_at_end: dict[str, int]           # silent channels per layer in the last state recorded
+    last_check: Optional[int]               # step of the last check
+    kinds: dict[str, str]                   # layer -> module type (Conv2d, Linear, ...), where recorded
+
+    def kind(self, layer: Any) -> Optional[str]:
+        return self.kinds.get(str(layer))
+
+    def later_checks(self, step: int) -> Optional[int]:
+        """Checks recorded strictly after `step`; None for a record without metrics."""
+        if not self.has_metrics:
+            return None
+        return sum(1 for r in self.metrics if isinstance(r.get("step"), (int, float)) and r["step"] > step)
 
     @property
     def finished(self) -> bool:
@@ -304,12 +359,64 @@ def analyse(run_dir: str | Path, config: ReportConfig | None = None,
                 silent[layer] = max(silent.get(layer, 0), st.silent)
 
     shown = [e for e in events if e.get("event") not in HIDDEN_EVENTS]
+    final = timeline[-1][1] if timeline else {}
+    silent_end = {k: st.silent for k, st in final.items() if st.silent}
+    checks_at = sorted(int(r["step"]) for r in metrics if isinstance(r.get("step"), (int, float)))
     return RunFacts(run_dir=run_dir, events=events, metrics=metrics, has_metrics=bool(metrics),
                     start=start, end=end, manifests=manifests, check_every=check_every,
                     repair_mode=repair_mode, total_steps=total, shown=shown, episodes=episodes,
                     silent_peaks=silent, layer_peaks=peaks, cost=cost,
                     leads=_leads(events, check_every, config), trust=trust(run_dir, end, public_key),
-                    time_at=time_at, config=config)
+                    time_at=time_at, config=config, coverage=_coverage(events, metrics, end, manifests),
+                    silent_at_end=silent_end, last_check=checks_at[-1] if checks_at else None,
+                    kinds=_kinds(events))
+
+
+def _kinds(events: list[dict]) -> dict[str, str]:
+    """Module type per layer, from the manifest's producers and any event naming one."""
+    out: dict[str, str] = {}
+    for e in events:
+        rows = e.get("producers") if e.get("event") == "manifest" else [e]
+        for r in rows or []:
+            if isinstance(r, dict) and r.get("layer") and isinstance(r.get("kind"), str) \
+                    and r["kind"][:1].isupper():          # a class name, not an alarm/diagnosis word
+                out.setdefault(str(r["layer"]), r["kind"])
+    return out
+
+
+def _coverage(events: list[dict], metrics: list[dict], end: Optional[dict],
+              manifests: list[dict]) -> Coverage:
+    """Did the checks see gradients? From the metrics rows; `run_end` counts and `no_gradients`
+    events fill in for records without metrics."""
+    counts = (end or {}).get("counts") or {}
+    rows = [r for r in metrics if isinstance(r.get("step"), (int, float))]
+    checks: Optional[int] = None
+    if end is not None and end.get("checks") is not None:
+        checks = int(end["checks"])
+    elif rows:
+        checks = len(rows)
+    blind_rows = [int(r["step"]) for r in rows if not r.get("grad")]
+    flagged = [e for e in events if e.get("event") == "no_gradients"]
+    without: Optional[int] = None
+    if counts.get("checks_without_gradients") is not None:
+        without = int(counts["checks_without_gradients"])
+    elif rows:
+        without = len(blind_rows)
+    elif flagged:
+        without = len(flagged)
+    seen: Optional[bool] = None
+    if rows:
+        seen = len(blind_rows) < len(rows)
+    elif without is not None and checks:
+        seen = without < checks
+    first = [int(e["step"]) for e in flagged if isinstance(e.get("step"), (int, float))] + blind_rows[:1]
+    monitored = None
+    for m in manifests:
+        layers = m.get("layers")
+        if isinstance(layers, dict) and isinstance(layers.get("monitored"), int):
+            monitored = layers["monitored"]
+    return Coverage(checks=checks, without_gradients=without, gradients_seen=seen,
+                    first_without=min(first) if first else None, monitored_layers=monitored)
 
 
 # --------------------------------------------------------------------------- time

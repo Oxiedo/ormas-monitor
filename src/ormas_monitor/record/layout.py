@@ -2,6 +2,8 @@
 onto them."""
 from __future__ import annotations
 
+import os
+import stat
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -48,3 +50,26 @@ def locate(path: str | Path, layout: RecordLayout = LAYOUT) -> Location:
     if p.name == layout.diary:
         return Location(diary=p, run_dir=p.parent)
     return Location(diary=p, run_dir=None)
+
+
+def file_problem(path: Path) -> str | None:
+    """Why `path` is not a plain file of the run directory: None for a regular file, "missing",
+    or a short reason ("a symbolic link ...", "not a regular file", ...). Never follows a link.
+
+    Record files must be the directory's own regular files. A link would let a run directory
+    handed over by someone else make `sign` write, or `verify` read, a file elsewhere on the
+    reviewer's machine; a FIFO or device (say /dev/zero) would make hashing it hang.
+    """
+    try:
+        st = os.lstat(path)
+    except FileNotFoundError:
+        return "missing"
+    except ValueError:              # an embedded NUL byte
+        return "not a valid file name"
+    except OSError as e:
+        return f"unreadable ({e.strerror or e})"
+    if stat.S_ISLNK(st.st_mode):
+        return "a symbolic link (not followed: a record must hold its own files)"
+    if not stat.S_ISREG(st.st_mode):
+        return "not a regular file"
+    return None

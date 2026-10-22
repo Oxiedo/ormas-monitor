@@ -59,6 +59,14 @@ class MonitorConfig:
                           layer), so the repair is identical in every process. Under
                           torch.distributed, None is treated as 0.
 
+    Certificate
+        certify_optimizers  names of extra optimizer types (class name or module.qualname) the
+                          certificate may trust. Built in: SGD, Adam, AdamW, NAdam, RAdam,
+                          Adamax. For an opted-in optimizer every state tensor shaped like a
+                          parameter must be exactly zero for the channel, and only decoupled
+                          weight decay is accepted. Opting in asserts that, with zero gradient
+                          and zero state, its step leaves the parameter alone apart from decay.
+
     Record size
         list_limit        channel lists in `channels` events are truncated to this length.
         channel_list_limit  channel lists in `certificate` and `repair` events.
@@ -76,6 +84,7 @@ class MonitorConfig:
     certified_repair_streak: int = 2
     decayed_rel_tol: float = DECAYED_REL_TOL
     repair_seed: int | None = None
+    certify_optimizers: tuple[str, ...] = ()
     list_limit: int = 64
     channel_list_limit: int = 256
     layer_list_limit: int = 32
@@ -102,6 +111,12 @@ class MonitorConfig:
             raise ValueError(f"MonitorConfig.decayed_rel_tol must be in (0, 1), got {self.decayed_rel_tol!r}")
         if self.repair_seed is not None and (not _is_int(self.repair_seed) or self.repair_seed < 0):
             raise ValueError(f"MonitorConfig.repair_seed must be None or an int >= 0, got {self.repair_seed!r}")
+        names = self.certify_optimizers
+        if isinstance(names, str) or not isinstance(names, (tuple, list)) or \
+                not all(isinstance(x, str) and x for x in names):
+            raise ValueError("MonitorConfig.certify_optimizers must be a tuple of optimizer type names, "
+                             f"got {names!r}")
+        object.__setattr__(self, "certify_optimizers", tuple(names))
 
     def replace(self, **changes: Any) -> MonitorConfig:
         """A copy with `changes` applied (validated again). Unknown names raise TypeError."""

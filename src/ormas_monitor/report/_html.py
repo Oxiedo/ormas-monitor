@@ -40,6 +40,7 @@ code{background:var(--card);padding:1px 5px;border-radius:4px}
 .bad{background:var(--redbg);border-color:var(--red)}.bad .status{color:var(--red)}
 .warn{background:var(--amberbg);border-color:var(--amber)}.warn .status{color:var(--amber)}
 .fixed{background:var(--bluebg);border-color:var(--blue)}.fixed .status{color:var(--blue)}
+.neutral{background:var(--card);border-color:var(--line)}.neutral .status{color:var(--mute)}
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0}
 .tile{background:var(--card);border-radius:10px;padding:12px 14px;break-inside:avoid}
 .tile .n{font-size:22px;font-weight:700;line-height:1.25;font-variant-numeric:tabular-nums}
@@ -108,26 +109,54 @@ LABEL = {"critical": "Critical", "warning": "Warning", "proof": "Proof", "action
 GLYPH = {"certificate": "◆", "repair": "▲", "alarm": "●", "channels": "■", "loss_spike": "✕",
          "nonfinite_loss": "!", "nonfinite_gradient": "!"}
 GLYPH_WORD = {"certificate": "proven dead", "repair": "repair", "alarm": "gradient alarm",
-              "channels": "stuck channels", "loss_spike": "loss spike", "nonfinite_loss": "NaN / Inf",
+              "channels": "stuck or silent channels", "loss_spike": "loss spike", "nonfinite_loss": "NaN / Inf",
               "nonfinite_gradient": "NaN / Inf"}
 
 
-def page(title: str, body: str, narrow: bool = False) -> str:
-    """Wrap a report body in a complete, self-contained HTML document."""
+# What each kind of page is built from, for the provenance footer.
+SOURCES = {"run": "the run's own record",
+           "check": "the saved weights of the checked file (no training record is involved)",
+           "diff": "the two runs' records (their diaries and metrics files)"}
+
+
+def page(title: str, body: str, narrow: bool = False, *, source: str) -> str:
+    """Wrap a report body in a complete, self-contained HTML document. `source` is a key of
+    `SOURCES` and names what the page was built from in the footer."""
     return (f"<!doctype html><html lang='en'><head><meta charset='utf-8'>"
             f"<meta name='viewport' content='width=device-width,initial-scale=1'>"
             f"<meta name='generator' content='ormas-monitor {escape(__version__)}'>"
             f"<title>{escape(title)}</title><style>{CSS}</style></head><body>"
-            f"<main{NARROW if narrow else ''}>{body}{footer()}</main></body></html>")
+            f"<main{NARROW if narrow else ''}>{body}{footer(source)}</main></body></html>")
 
 
-def footer() -> str:
-    """The provenance footer shared by every report."""
-    return (f"<footer>Generated on this machine by <b>ormas-monitor {escape(__version__)}</b> from the "
-            f"run's own record. Nothing was uploaded anywhere. Dead-channel proofs follow Theorem 2 of "
+def footer(source: str) -> str:
+    """The provenance footer, naming what this kind of page was built from."""
+    assert source in SOURCES, f"unknown page source {source!r}"
+    return (f"<footer>Generated on this machine by <b>ormas-monitor {escape(__version__)}</b> from "
+            f"{escape(SOURCES[source])}. Nothing was uploaded anywhere. Dead-channel proofs follow Theorem 2 of "
             f"R. A. D. Raadh, <i>Self-Repair as a Bounded Disturbance</i> (DeepMath 2026). Built by "
             f"<a href='https://oxiedo.com'>Oxiedo</a>. Questions about this report: "
             f"<a href='mailto:raadh@oxiedo.com'>raadh@oxiedo.com</a></footer>")
+
+
+def layer_text(name: str, kind: str | None = None) -> str:
+    """A layer named in prose: 'layer `3` (Conv2d)'. Bare `nn.Sequential` indices are unreadable
+    on their own, so the module type is added whenever it is known."""
+    return f"layer `{name}`" + (f" ({kind})" if kind else "")
+
+
+def layer_html(name: str, kind: str | None = None) -> str:
+    """A layer in a table cell or HTML sentence: monospace name, module type beside it in grey."""
+    return (f"<span class='mono'>{escape(name)}</span>"
+            + (f" <span class='sub small'>({escape(kind)})</span>" if kind else ""))
+
+
+def code_spans(text: str) -> str:
+    """Escape plain text and turn `backticked` names into <code> (the summary's HTML rendering)."""
+    parts = escape(text).split("`")
+    if len(parts) % 2 == 0:            # unbalanced backticks: leave the text as it is
+        return escape(text)
+    return "".join(f"<code>{x}</code>" if i % 2 else x for i, x in enumerate(parts))
 
 
 def fmt(x: Any) -> str:

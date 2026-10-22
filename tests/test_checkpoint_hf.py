@@ -39,7 +39,7 @@ def test_hf_resnet_folder_traced(tmp_path):
     assert w["traced"] and w["source"] == "hf:ResNetForImageClassification" and w["matched"] == w["batchnorms"]
     dead = by_kind(res, "dead_channels")
     assert [(f["batchnorm"], f["channels"]) for f in dead] == [("resnet.embedder.embedder.normalization", [0, 1])]
-    assert "if a ReLU follows" not in dead[0]["title"]
+    assert "if a ReLU" not in dead[0]["title"]
     end = "resnet.encoder.stages.1.layers.0.layer.1.normalization"
     flat = {f["batchnorm"]: f["channels"] for f in by_kind(res, "flat_channels")}
     assert flat[end] == [0, 1, 2, 3]                 # residual add before the ReLU: no certificate
@@ -49,7 +49,7 @@ def test_hf_resnet_without_arch_uses_conditional_wording(tmp_path):
     tiny_resnet(tmp_path / "m")
     res = run(tmp_path / "m")
     assert not res["wiring"]["traced"]
-    assert all("if a ReLU follows" in f["title"] for f in by_kind(res, "dead_channels"))
+    assert all("if a ReLU directly follows" in f["title"] for f in by_kind(res, "dead_channels"))
 
 
 @pytest.mark.parametrize("kwargs", [{"max_shard_size": "20KB"}, {"safe_serialization": False}])

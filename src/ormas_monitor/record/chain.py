@@ -77,7 +77,7 @@ def parse_lines(path: str | Path) -> tuple[list[dict], list[int]]:
                 continue
             try:
                 obj = json.loads(text)
-            except json.JSONDecodeError:
+            except (ValueError, RecursionError):     # not JSON, an over-long integer, or nested too deep
                 bad.append(no)
                 continue
             if isinstance(obj, dict):

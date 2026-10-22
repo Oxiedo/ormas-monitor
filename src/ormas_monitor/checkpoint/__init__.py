@@ -12,7 +12,11 @@ machine unless you pass trust=True.
 batchnorm_layers, findings, layers`, plus `against`/`diff` with a second checkpoint. Added keys:
 `format, files, wrapper, streamed, dtypes, model_type, wiring, notes, norm_layers,
 severity_counts`; `layers[*]` gains `feeds_relu, wiring`; `diff` gains `dtype_changed` and
-`embedding_rows_unchanged`.
+`embedding_rows_unchanged`; `wiring` gains `model_batchnorms`.
+
+With `arch`, an architecture that holds under half of the file's BatchNorms (or the file under
+half of its) raises CheckpointError; a partial match above that adds an `arch_partial_match`
+warning finding.
 """
 from __future__ import annotations
 
@@ -88,7 +92,7 @@ def run(path: str | Path, against: str | Path | None = None, trust: bool = False
     cfg = config or CheckConfig()
     with open_source(path, trust) as src:
         bns = batchnorm_names(src)
-        wiring = resolve(arch, src, bns)
+        wiring = resolve(arch, src, bns, cfg.arch_min_match)
         follow = set(wiring.relu_after) if wiring.relu_after is not None else None
         known = set(wiring.known) if wiring.known is not None else None
         reader = _Reader(src, cfg)
@@ -118,6 +122,12 @@ def run(path: str | Path, against: str | Path | None = None, trust: bool = False
                         "detail": ", ".join(f"{n['layer']}: {n['count']}" for n in newly)})
                 result["findings"] += diff_findings(d, Path(str(against)).name)
                 sort_findings(result["findings"])
+        if wiring.warning:
+            result["findings"].append({
+                "severity": "warning", "kind": "arch_partial_match", "title": wiring.warning,
+                "detail": f"{wiring.note}. Findings for the matched layers use the traced wiring; check "
+                          "that --arch names the architecture this file was saved from."})
+            sort_findings(result["findings"])
         model_types = [src.config.get("model_type")] if src.config else []
         result.update({
             "format": src.format, "files": list(src.files), "wrapper": src.wrapper, "streamed": src.streamed,
@@ -126,7 +136,7 @@ def run(path: str | Path, against: str | Path | None = None, trust: bool = False
     if wiring.note:
         result["notes"].insert(0, wiring.note)
     elif wiring.relu_after is None and bns:
-        result["notes"].insert(0, "Wiring not known, so BatchNorm findings say \"if a ReLU follows\". Pass "
+        result["notes"].insert(0, "Wiring not known, so BatchNorm findings say \"if a ReLU directly follows\". Pass "
                                   "--arch torchvision:<name> or --arch hf for exact wiring.")
     if not result["streamed"]:
         result["notes"].append("This file uses PyTorch's legacy (pre-1.6) format, which cannot be memory-mapped; "

@@ -20,19 +20,26 @@ def _text(r: dict) -> str:
              f"{'intact' if r['a']['intact'] else 'FAILED VERIFICATION'})",
              f"B: {r['b']['path']}  ({r['b']['name']}, {r['b']['steps']} steps, "
              f"{'intact' if r['b']['intact'] else 'FAILED VERIFICATION'})",
-             "", r["verdict"], ""]
+             "", r["verdict"]]
+    if r.get("verdict_detail"):
+        lines.append(r["verdict_detail"])
+    lines.append("")
     for c in r["config_changes"] + r["environment_changes"]:
         lines.append(f"  changed  {c['key']}: {c['a']!r} -> {c['b']!r}")
     changed = [row for row in r["layers"] if row["changed"]]
     if changed:
+        cols = (("proven_at_end", "proven stuck"), ("silent_at_end", "silent"), ("certified", "certified"),
+                ("alarms", "alarms"), ("channels_repaired", "repaired"))
         lines.append("")
-        lines.append(f"  {'layer':<28}{'alarms':>10}{'peak stuck':>14}{'certified':>13}{'repairs':>11}")
+        lines.append(f"  {'layer':<28}{'in B':<13}" + "".join(f"{title:>14}" for _, title in cols))
         for row in changed:
             def pair(k: str, row: dict = row) -> str:
-                fa, fb = row[f"{k}_a"], row[f"{k}_b"]
+                fa, fb = row.get(f"{k}_a"), row.get(f"{k}_b")
                 return f"{'-' if fa is None else fa}->{'-' if fb is None else fb}"
-            lines.append(f"  {row['layer']:<28}{pair('alarms'):>10}{pair('peak_stuck'):>14}"
-                         f"{pair('certified'):>13}{pair('repairs'):>11}")
+            health = row.get("health") or ("only in A" if row["in_a"] else "only in B")
+            if health == "same" and row.get("silent_change"):
+                health = f"{row['silent_change']} silent"
+            lines.append(f"  {row['layer']:<28}{health:<13}" + "".join(f"{pair(k):>14}" for k, _ in cols))
     return "\n".join(lines)
 
 

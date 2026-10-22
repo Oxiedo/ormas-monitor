@@ -59,7 +59,7 @@ def main() -> None:
     opt = torch.optim.SGD(model.parameters(), lr=0.05, momentum=0.9)
     loader = torch.utils.data.DataLoader(synthetic(), batch_size=32, shuffle=True)
 
-    with Monitor(model, opt, out=a.out, repair=a.repair, check_every=10, verbose=False,
+    with Monitor(model, opt, out=a.out, overwrite=True, repair=a.repair, check_every=10, verbose=False,
                  sinks=[LoggingSink(min_severity="warning")]) as mon:
         for epoch in range(4):
             correct = 0

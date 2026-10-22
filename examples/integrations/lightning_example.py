@@ -69,7 +69,7 @@ def main() -> None:
     model = Classifier()
     break_layer(model.net)
     loader = torch.utils.data.DataLoader(synthetic(), batch_size=32, shuffle=True)
-    cb = OrmasMonitorCallback(repair=True, check_every=10, out=a.out)
+    cb = OrmasMonitorCallback(repair=True, check_every=10, out=a.out, overwrite=True)   # re-runs replace it
     trainer = L.Trainer(max_epochs=4, accumulate_grad_batches=2, accelerator="cpu", devices=1,
                         logger=False, enable_checkpointing=False, enable_progress_bar=False,
                         enable_model_summary=False, callbacks=[cb])

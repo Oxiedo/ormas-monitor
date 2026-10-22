@@ -9,6 +9,10 @@
     with ``model.safetensors.index.json``, ``pytorch_model.bin`` or its sharded index;
   * a ``*.index.json`` file directly.
 
+Files named by a folder or an index (shards, a symlinked ``model.safetensors``) must resolve
+inside that folder; ``../``, absolute paths and symlinks pointing elsewhere are refused. The one
+exception is a Hugging Face cache snapshot, whose files are symlinks into the cache's ``blobs``.
+
 ``module.`` (DataParallel) and ``_orig_mod.`` (torch.compile) prefixes are removed. PyTorch files
 that contain Python objects rather than plain tensors are refused unless ``trust=True``, because
 unpickling them can run code.
@@ -251,17 +255,52 @@ class TorchSource(TensorSource):
         self._t = {}
 
 
+def _allowed_roots(folder: Path) -> list[Path]:
+    """Where files named by `folder` may live: the folder itself, plus the shared blob store
+    when `folder` is a Hugging Face cache snapshot (``snapshots/<rev>/x -> ../../blobs/<hash>``)."""
+    roots = [folder.resolve()]
+    if folder.parent.name == "snapshots":
+        roots.append((folder.parent.parent / "blobs").resolve())
+    return roots
+
+
+def _inside(path: Path, folder: Path, what: str) -> Path:
+    """`path`, after checking that it (and any symlink it is) resolves inside `folder`."""
+    real = path.resolve()
+    if not any(real == r or r in real.parents for r in _allowed_roots(folder)):
+        raise CheckpointError(f"{what} resolves to {real}, outside {folder}; refusing to read it "
+                              "(a model folder may only point at files inside itself)")
+    return real
+
+
+def _shard_path(index: Path, shard: object) -> Path:
+    """The file a weight_map entry names, refused unless it is a plain relative path inside the folder."""
+    if not isinstance(shard, str) or not shard.strip():
+        raise CheckpointError(f"{index.name} is not a valid shard index: shard names must be "
+                              f"non-empty strings, found {shard!r}")
+    rel = Path(shard)
+    if rel.is_absolute() or shard.startswith(("/", "\\")) or ".." in rel.parts or ".." in shard.split("\\"):
+        raise CheckpointError(f"{index.name} names the shard {shard!r}, which is outside the folder; "
+                              "shard paths must be relative and stay inside it")
+    path = index.parent / rel
+    _inside(path, index.parent, f"{index.name} shard {shard!r}")
+    return path
+
+
 def _from_index(index: Path, trust: bool) -> TensorSource:
     try:
         weight_map = json.loads(index.read_text())["weight_map"]
     except (ValueError, KeyError, TypeError) as e:
         raise CheckpointError(f"{index.name} is not a valid shard index (needs a weight_map)") from e
+    if not isinstance(weight_map, dict):
+        raise CheckpointError(f"{index.name} is not a valid shard index: weight_map must map tensor "
+                              "names to shard file names")
     shards: list[str] = []
     for shard in weight_map.values():
         if shard not in shards:
             shards.append(shard)
-    paths = [index.parent / s for s in shards]
-    absent = [p.name for p in paths if not p.exists()]
+    paths = [_shard_path(index, s) for s in shards]
+    absent = [p.name for p in paths if not p.is_file()]
     if absent:
         raise CheckpointError(f"{index.name} lists shard files that are missing: {', '.join(absent[:5])}")
     src: TensorSource = (SafetensorsSource(paths) if index.name.endswith(".safetensors.index.json")
@@ -306,6 +345,8 @@ def open_source(path: str | Path, trust: bool = False) -> TensorSource:
         raise CheckpointError(f"{path} does not exist")
     folder = path.is_dir()
     target = _folder_files(path) if folder else path
+    if folder:
+        _inside(target, path, target.name)
     if target.name.endswith(".index.json"):
         src = _from_index(target, trust)
         src.format = f"{src.format}-sharded"

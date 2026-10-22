@@ -13,9 +13,23 @@ Every `check_every` steps it reads per-layer gradient norms and per-channel acti
 alarms against each layer's own baseline, certifies dead channels, optionally repairs them,
 and writes every event to the hash-chained Diary. Nothing leaves the machine.
 
-Thresholds live in `MonitorConfig` (config.py); the event schema in schema.py; repair in repair.py.
-At the first check a `manifest` event records which mechanisms are actually active for this
-model and run (certificate per layer, repair mode, mixed precision, distributed mode).
+Thresholds live in `MonitorConfig` (config.py); the event schema in schema.py; repair and the
+optimizer rules in repair.py. At the first check a `manifest` event records which mechanisms are
+actually active for this model and run (certificate per layer, repair mode, mixed precision,
+distributed mode).
+
+The certificate (Theorem 2) is issued for a channel of a Conv/Linear -> BatchNorm -> ReLU chain
+only when all of these hold, and `certificate_refused` says which one failed:
+  * structure, from the first sampled step: the BatchNorm's input *is* the producer's output
+    tensor, unmodified (dataflow, not execution order); in the autograd graph of that step the
+    producer's output has exactly one consumer, the BatchNorm, and the BatchNorm's exactly one,
+    a ReLU module (dtype casts in between are allowed); producer and BatchNorm each ran exactly
+    once per forward pass, then and at every later check (otherwise the layer is refused for good);
+  * weights: zero filter with zero or no producer bias, or zero BatchNorm scale; shift <= 0;
+  * optimizer: SGD or the Adam family (or an opt-in type), weight decay that cannot lift the
+    shift above 0, and no first-moment state for the channel;
+  * at every check: BatchNorm in training mode, and the gradient of the channel's filter row,
+    producer bias, scale and shift exactly zero.
 
 Changes in 0.2:
   * thresholds moved to MonitorConfig; keyword shortcuts still override it;
@@ -25,8 +39,12 @@ Changes in 0.2:
     targets weight-detected channels only and uses a seeded generator; FSDP disables channel
     checks and refuses repair;
   * `layers=` fnmatch filter; `note_loss()`; torch.compile / DDP wrappers are unwrapped;
-  * the certificate now also requires the optimizer (to check momentum) and BatchNorm in
-    training mode, both of which the statement assumes;
+  * the certificate conditions above (dataflow pairing, autograd consumer check, optimizer
+    allow-list, per-check gradient guard); `certificate_refused`, `no_gradients`, `loss_reduced`;
+  * never breaks training: empty batches, sparse gradients, models split across devices and
+    unreduced losses are handled; a constant number of host reads per check; `close()` never
+    raises over a pending exception;
+  * `overwrite=False`: a run directory that already holds a record is refused;
   * sinks receive every diary line, run_start and run_end included; each failing sink
     produces exactly one `sink_error`.
 """
@@ -37,8 +55,10 @@ import hashlib
 import math
 import platform
 import sys
+from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 import torch
 import torch.nn as nn
@@ -46,14 +66,19 @@ import torch.nn as nn
 from . import __version__
 from .config import MonitorConfig
 from .diary import Diary, file_sha256
-from .repair import METHOD, MODIFICATION_CLASS, first_moment_mask, repair_channels, repair_generator, \
-    unwrap_optimizer
+from .repair import METHOD, MODIFICATION_CLASS, decay_reason, find_optimizer, moving_mask, optimizer_family, \
+    repair_channels, repair_generator
 from .schema import RECORD_VERSION
-from .structure import BN_KINDS, CONV_KINDS, RELU_KINDS, pair_by_order, scan_channels
+from .structure import BN_KINDS, CONV_KINDS, RELU_KINDS, channel_masks
 
 _LOG_EPS = 1e-30          # log10(0 + eps) = -30: a zero gradient norm, kept finite
 _NO_GRAD_FLOOR = -29.0    # a baseline above this was not itself built from zero gradients
 _HALF = (torch.float16, torch.bfloat16)
+_TRANSPARENT = ("ToCopyBackward0",)   # dtype casts (autocast) between two modules: elementwise
+_EXTERNAL = object()                  # graph "parent" of a root: consumed outside the model
+
+# Per-channel flag bits, packed into one uint8 tensor per layer so a check reads the host once.
+_CAND, _FLAT, _DECAYED, _CERT, _R_MOMENTUM, _R_GRADIENT, _QUIET, _ACT = 1, 2, 4, 8, 16, 32, 64, 128
 
 Sink = Callable[[str, dict], None]
 
@@ -73,9 +98,67 @@ def _level(stuck: int, total: int) -> str:
     return "most" if stuck * 2 >= total else "some"
 
 
+def _dense(g: torch.Tensor) -> torch.Tensor:
+    """The stored values of a sparse gradient (nn.Embedding(sparse=True)), else `g` itself."""
+    if g.layout == torch.sparse_coo:
+        return g.coalesce().values()
+    if g.layout != torch.strided:
+        return g.values()
+    return g
+
+
 def _norm32(g: torch.Tensor) -> torch.Tensor:
     # Telemetry stays full precision: cast before the reduction, never after.
+    g = _dense(g)
     return torch.linalg.vector_norm(g, dtype=torch.float32) if g.dtype in _HALF else torch.linalg.vector_norm(g)
+
+
+def _grad_fns(obj: Any, depth: int = 0) -> list:
+    """Autograd nodes of the tensors in a model output (tensor, sequence, mapping), bounded."""
+    if isinstance(obj, torch.Tensor):
+        return [obj.grad_fn] if obj.grad_fn is not None else []
+    if depth >= 4:
+        return []
+    items = obj.values() if isinstance(obj, Mapping) else obj if isinstance(obj, (list, tuple)) else ()
+    return [fn for x in list(items)[:64] for fn in _grad_fns(x, depth + 1)]
+
+
+def _graph_parents(roots: list) -> dict:
+    """node -> list of nodes that consume it (one entry per edge), over the graph under `roots`.
+    Each root also gets the `_EXTERNAL` parent: its value leaves the walked graph."""
+    parents: dict = {}
+    for r in roots:
+        parents.setdefault(r, []).append(_EXTERNAL)
+    seen, stack = set(), list(roots)
+    while stack:
+        node = stack.pop()
+        if node in seen:
+            continue
+        seen.add(node)
+        for nxt, _ in node.next_functions:
+            if nxt is not None:
+                parents.setdefault(nxt, []).append(node)
+                stack.append(nxt)
+    return parents
+
+
+def _sole_consumer(parents: dict, node: Any) -> tuple[Any, str | None]:
+    """(the one node consuming `node`'s output, looking through dtype casts, None) or (None, why)."""
+    while True:
+        ps = parents.get(node)
+        if ps is None:
+            return None, "is not part of the autograd graph the monitor walked"
+        if len(ps) != 1:
+            return None, f"has {len(ps)} consumers in the autograd graph"
+        if ps[0] is _EXTERNAL:
+            return None, "is returned from the model, so its consumers are unknown"
+        if type(ps[0]).__name__ not in _TRANSPARENT:
+            return ps[0], None
+        node = ps[0]
+
+
+def _dense_grad(g: torch.Tensor) -> torch.Tensor:
+    return g.to_dense() if g.layout != torch.strided else g
 
 
 def _unwrap_model(model: nn.Module) -> tuple[nn.Module, list[str]]:
@@ -149,13 +232,31 @@ class _Baseline:
         self.n += 1
 
 
+@dataclass
+class _Chain:
+    """One producer (Conv/Linear with a 2-D+ weight) and what follows it, fixed at the first check.
+    `reason` is None while the layer may be certified, else why it may not (structural, or a
+    module-call change seen later; both permanent). `offset` locates its channels in the
+    monitor's concatenated per-channel counters."""
+    name: str
+    prod: nn.Module
+    bn: nn.Module | None
+    bn_name: str | None
+    out_name: str
+    n: int
+    offset: int
+    relu: bool
+    reason: str | None
+
+
 class Monitor:
     """Watch a model while it trains. See the module docstring for the loop.
 
     Args:
         model: the model being trained (a torch.compile or DDP wrapper is fine).
         optimizer: needed for repair and for the certificate's momentum check. Framework
-            wrappers (Lightning, accelerate) are unwrapped.
+            wrappers (Lightning, accelerate) are unwrapped. An object that is not a torch
+            optimizer (e.g. DeepSpeed's) is accepted for watching: no certificate, no repair.
         out: run directory for diary.jsonl, metrics.jsonl and the reports.
         repair: False (watch only), True (repair certified, flat and decayed channels) or
             "all" (also channels silent for `patience` checks; not under torch.distributed).
@@ -166,6 +267,8 @@ class Monitor:
         config: a MonitorConfig with every threshold (default: MonitorConfig()).
         scaler: the torch.amp.GradScaler used for mixed precision, if any.
         layers: fnmatch pattern(s) on module names; only matching layers are monitored.
+        overwrite: replace a record already in `out`. False (default) raises FileExistsError
+            rather than destroy a previous, possibly signed, record.
     """
 
     def __init__(self, model: nn.Module, optimizer: torch.optim.Optimizer | None = None, *,
@@ -174,7 +277,7 @@ class Monitor:
                  sigma: float | None = None, warmup: int | None = None, name: str | None = None,
                  sinks: Sequence[Sink] = (), verbose: bool = True,
                  config: MonitorConfig | None = None, scaler: Any = None,
-                 layers: str | Sequence[str] | None = None) -> None:
+                 layers: str | Sequence[str] | None = None, overwrite: bool = False) -> None:
         if config is not None and not isinstance(config, MonitorConfig):
             raise TypeError(f"config must be a MonitorConfig, got {type(config).__name__}")
         overrides = {k: v for k, v in (("check_every", check_every), ("patience", patience),
@@ -184,6 +287,10 @@ class Monitor:
             raise ValueError("repair needs the optimizer, so its state for repaired channels can be reset")
         if repair not in (False, True, "all"):
             raise ValueError("repair must be False, True (certified and flat channels) or 'all'")
+        self._opt = find_optimizer(optimizer)
+        if repair and self._opt is None:
+            raise ValueError(f"repair needs a torch.optim.Optimizer to reset the repaired channels' state; "
+                             f"{type(optimizer).__name__} is not one. Use repair=False to watch only")
         if scaler is not None:
             if not (callable(getattr(scaler, "is_enabled", None)) and callable(getattr(scaler, "get_scale", None))):
                 raise TypeError(f"scaler must be a torch.amp.GradScaler, got {type(scaler).__name__}")
@@ -192,7 +299,7 @@ class Monitor:
                                  "unscale_ was called")
 
         self.model, self.optimizer = model, optimizer
-        self._opt = unwrap_optimizer(optimizer)
+        self._family = optimizer_family(self._opt, self.config.certify_optimizers)
         self._net, self._wrappers = _unwrap_model(model)
         self.dist_mode, self.rank, self.world_size = _distributed(self._net, self._wrappers)
         if self.dist_mode == "fsdp" and repair:
@@ -200,10 +307,14 @@ class Monitor:
                              "so per-channel filters cannot be read or rewritten. Use repair=False; "
                              "gradient alarms and the record still work")
         self.out = Path(out)
+        self._writer = self.rank == 0
+        if self._writer and not overwrite and (self.out / "diary.jsonl").exists():
+            raise FileExistsError(f"{self.out} already holds a run record (diary.jsonl); starting a new run "
+                                  f"there would destroy it. Choose another out= directory, or pass "
+                                  f"overwrite=True to replace it")
         self.repair_mode = repair
         self.scaler = scaler
         self.verbose = verbose
-        self._writer = self.rank == 0
         # Sinks receive every diary line and metrics row: sink(kind, payload). A failing sink is
         # reported once as a `sink_error` event and then skipped (the one sanctioned swallow).
         self.sinks = list(sinks)
@@ -236,32 +347,38 @@ class Monitor:
         self.checks = 0
         self._sampling = True
         self._noted_loss: torch.Tensor | float | None = None
-        self._order: list[str] = []
+        self._noted_fn = None
+        # Structure detection, during the first sampled step only.
+        self._detecting = True
+        self._outs: dict[int, tuple[str, torch.Tensor, int]] = {}   # this forward's outputs, by id
+        self._feeds: dict[str, set[str | None]] = {}   # BatchNorm -> producers whose output it got
         self._relu_after: set[str] = set()      # layers whose output goes straight into a ReLU
-        self._last_out = None
+        self._fn: dict[str, Any] = {}           # module -> autograd node of its last output
+        self._relu_fns: set = set()             # autograd nodes made by ReLU modules
+        self._root_fns: list = []               # autograd nodes of the model's last outputs
+        self.graph_source: str | None = None    # "loss" | "model outputs" | None
+        # Module calls per forward pass, on sampled steps (shared modules, dynamic graphs).
+        self._fwd: Counter | None = None
+        self._profiles: list[Counter] = []
+        self._loose: Counter = Counter()        # calls outside the root module's forward
         self._act_max: dict[str, torch.Tensor] = {}
         self._act_watch: set[str] | None = None  # None until the structure is known: watch all
         self.pairs: dict[str, str] | None = None
+        self._chains: list[_Chain] = []
+        self._silent_all = self._streak_all = self._layer_id = torch.zeros(0, dtype=torch.long)
         self._base = {n: _Baseline() for n in self.modules}
         self._loss = _Baseline()
         self._loss_bad = False
         self._spiking = False
         self._grad_bad = False
-        self._streak: dict[str, torch.Tensor] = {}
-        self._silent: dict[str, torch.Tensor] = {}
         self._channel_level: dict[str, str] = {}
         self._certified_seen: set[str] = set()
+        self._refused_seen: set[tuple[str, str]] = set()
+        self._warned: set[str] = set()
         self.counts = {"alarms": 0, "stuck_layers": 0, "repairs": 0, "channels_repaired": 0,
-                       "loss_spikes": 0, "nonfinite": 0, "skipped_steps": 0}
+                       "loss_spikes": 0, "nonfinite": 0, "skipped_steps": 0, "checks_without_gradients": 0}
         self._closed = False
-
-        self._handles = []
-        for n, m in self._all_modules.items():
-            if self._all_kinds[n] in CONV_KINDS or self._all_kinds[n] in BN_KINDS:
-                self._handles.append(m.register_forward_hook(self._hook(n)))
-        for m in net.modules():
-            if isinstance(m, RELU_KINDS):
-                self._handles.append(m.register_forward_pre_hook(self._relu_hook))
+        self._error: str | None = None
 
         self.diary: Diary | None = None
         self._metrics = None
@@ -275,6 +392,8 @@ class Monitor:
             g = self._opt.param_groups[0]
             opt = {"type": type(self._opt).__name__,
                    **{k: g[k] for k in ("lr", "weight_decay", "momentum", "betas") if k in g}}
+        elif optimizer is not None:
+            opt = {"type": type(optimizer).__name__}
         self._write(
             "run_start", name=name or self.out.name, tool=f"ormas-monitor {__version__}",
             model=type(net).__name__,
@@ -283,6 +402,19 @@ class Monitor:
             optimizer=opt, python=sys.version.split()[0], torch=torch.__version__,
             platform=platform.platform(), record_version=RECORD_VERSION,
             config={**self.config.to_dict(), "repair": repair, "layers": self.layer_patterns})
+
+        self._handles = [net.register_forward_pre_hook(self._root_pre), net.register_forward_hook(self._root_post)]
+        for n, m in self._all_modules.items():
+            if self._all_kinds[n] in CONV_KINDS or self._all_kinds[n] in BN_KINDS:
+                self._handles.append(m.register_forward_hook(self._hook(n)))
+            if self._all_kinds[n] in BN_KINDS:
+                self._handles.append(m.register_forward_pre_hook(self._bn_pre_hook(n)))
+        self._relu_handles = []
+        for m in net.modules():
+            if isinstance(m, RELU_KINDS):
+                self._relu_handles += [m.register_forward_pre_hook(self._relu_pre_hook),
+                                       m.register_forward_hook(self._relu_hook)]
+        self._handles += self._relu_handles
 
     # ------------------------------------------------------------------ settings, read-only
     @property
@@ -306,15 +438,38 @@ class Monitor:
         return self.config.warmup
 
     # ------------------------------------------------------------------ hooks
+    # Every hook returns at once on unsampled steps. On sampled steps the root hooks delimit
+    # forward passes so module calls can be counted per pass; during the first sampled step the
+    # module hooks also record outputs and autograd nodes for structure detection.
+    def _root_pre(self, module, inputs):
+        if self._sampling and module.training and torch.is_grad_enabled():
+            self._fwd = Counter()
+
+    def _root_post(self, module, inputs, output):
+        if self._fwd is None:
+            return
+        self._profiles.append(self._fwd)
+        self._fwd = None
+        if self._detecting:
+            self._outs.clear()           # pairing and ReLU checks happen within one forward
+            fns = _grad_fns(output)
+            if fns:
+                self._root_fns = fns
+
     def _hook(self, name: str):
         kind = self._all_kinds[name]
 
         def fn(module, inputs, output):
-            if not self._sampling or not module.training or not isinstance(output, torch.Tensor):
+            if not self._sampling or not isinstance(output, torch.Tensor) or output.numel() == 0:
                 return
-            if self.pairs is None:
-                self._order.append(name)
-                self._last_out = (name, output, output._version)
+            if torch.is_grad_enabled():
+                (self._fwd if self._fwd is not None else self._loose)[name] += 1
+            if not module.training:
+                return
+            if self._detecting:
+                self._outs[id(output)] = (name, output, output._version)
+                if output.grad_fn is not None:
+                    self._fn[name] = output.grad_fn
             elif name not in self._act_watch:
                 return
             with torch.no_grad():
@@ -324,44 +479,76 @@ class Monitor:
                     dims = (0,) + tuple(range(2, output.dim()))
                 peak = output.detach().amax(dim=dims) if dims else output.detach()
                 prev = self._act_max.get(name)
-                self._act_max[name] = peak if prev is None else torch.maximum(prev, peak)
+                self._act_max[name] = peak if prev is None or prev.shape != peak.shape \
+                    else torch.maximum(prev, peak)
         return fn
 
-    def _relu_hook(self, module, inputs):
+    def _same_output(self, x: Any) -> str | None:
+        """Name of the module whose output, in this forward, is `x` itself and unmodified."""
+        rec = self._outs.get(id(x)) if isinstance(x, torch.Tensor) else None
+        if rec is not None and rec[1] is x and x._version == rec[2]:
+            return rec[0]
+        return None
+
+    def _bn_pre_hook(self, name: str):
+        def fn(module, inputs):
+            # Pair by dataflow: the BatchNorm's input must be the producer's output tensor itself.
+            # A tensor modified in place since (version counter bumped) does not count.
+            if self._detecting and self._sampling and module.training:
+                src = self._same_output(inputs[0]) if inputs else None
+                self._feeds.setdefault(name, set()).add(src if self._all_kinds.get(src) in CONV_KINDS else None)
+        return fn
+
+    def _relu_pre_hook(self, module, inputs):
         # A ReLU directly consumes a layer's output only if it receives the very same tensor,
         # unmodified. A residual `out += identity` bumps the version counter, so it doesn't count.
-        last = self._last_out
-        if self.pairs is None and last is not None and inputs and inputs[0] is last[1] \
-                and inputs[0]._version == last[2]:
-            self._relu_after.add(last[0])
+        if self._detecting and self._sampling and inputs:
+            src = self._same_output(inputs[0])
+            if src is not None:
+                self._relu_after.add(src)
+
+    def _relu_hook(self, module, inputs, output):
+        if self._detecting and self._sampling and isinstance(output, torch.Tensor) and output.grad_fn is not None:
+            self._relu_fns.add(output.grad_fn)
 
     # ------------------------------------------------------------------ public API
     def note_loss(self, loss: torch.Tensor | float | None) -> None:
         """Record the loss of the current step, for integrations that cannot pass it to `step()`.
 
         The next `step()` called without a loss uses it; a loss passed to `step()` wins. The
-        value is read from the device only on sampled steps.
+        value is read from the device only on sampled steps. On the first sampled step a loss
+        that still has its autograd graph also serves the certificate's consumer check.
         """
+        self._noted_fn = loss.grad_fn if isinstance(loss, torch.Tensor) and self._detecting else None
         self._noted_loss = loss.detach() if isinstance(loss, torch.Tensor) else loss
 
     def step(self, loss: torch.Tensor | float | None = None) -> None:
         """Call once per optimizer step, after loss.backward() (and scaler.unscale_, if used)
-        and before optimizer.step()."""
+        and before optimizer.step().
+
+        A loss with more than one element (unreduced) is recorded as its mean; a `loss_reduced`
+        event says so once.
+        """
         if self._closed:
             raise RuntimeError("Monitor.step() called after close()")
         if loss is None:
-            loss = self._noted_loss
-        self._noted_loss = None
+            loss, root = self._noted_loss, self._noted_fn
+        else:
+            root = loss.grad_fn if isinstance(loss, torch.Tensor) else None
+        self._noted_loss = self._noted_fn = None
         step, sampled = self.step_count, self._sampling
         self.step_count += 1
         if sampled:
-            self._check(step, loss)
+            self._check(step, loss, root)
         self._sampling = self.step_count % self.config.check_every == 0
 
     def close(self, report: bool = True) -> Path | None:
         """Remove the hooks, write `run_end`, and (rank 0, report=True) write the reports.
 
-        Returns the engineer report's path, or None (no report, already closed, or not rank 0).
+        Returns the engineer report's path, or None (no report, already closed, not rank 0, or
+        the record could not be finished while another exception was propagating). Called while
+        an exception is propagating (a `finally:` block, `__exit__`), a failure here is printed
+        to stderr and does not replace the original exception.
         """
         if self._closed:
             return None
@@ -370,9 +557,24 @@ class Monitor:
             h.remove()
         if not self._writer:
             return None
+        pending = sys.exc_info()[1]
+        if pending is not None and self._error is None:
+            self._error = f"{type(pending).__name__}: {pending}"
+        try:
+            return self._finish(report)
+        except Exception as e:
+            if pending is None:
+                raise
+            print(f"[ormas-monitor] could not finish the record in {self.out} "
+                  f"({type(e).__name__}: {e}); the training error propagates unchanged",
+                  file=sys.stderr, flush=True)
+            return None
+
+    def _finish(self, report: bool) -> Path | None:
         self._metrics.close()
+        extra = {"error": self._error} if self._error is not None else {}
         self._write("run_end", steps=self.step_count, checks=self.checks, counts=self.counts,
-                    metrics_sha256=file_sha256(self.out / "metrics.jsonl"))
+                    metrics_sha256=file_sha256(self.out / "metrics.jsonl"), **extra)
         self.diary.close()
         if not report:
             return None
@@ -385,8 +587,16 @@ class Monitor:
     def __enter__(self) -> Monitor:
         return self
 
-    def __exit__(self, *exc: Any) -> None:
-        self.close()
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        if exc_type is None:
+            self.close()
+            return
+        self._error = f"{exc_type.__name__}: {exc}"
+        try:
+            self.close()
+        except Exception as e:           # never mask the exception that ended training
+            print(f"[ormas-monitor] could not finish the record in {self.out} ({type(e).__name__}: {e})",
+                  file=sys.stderr, flush=True)
 
     # ------------------------------------------------------------------ record
     def _say(self, msg: str) -> None:
@@ -420,27 +630,117 @@ class Monitor:
         if msg:
             self._say(f"step {step:,}: {msg}")
 
-    # ------------------------------------------------------------------ checks
-    def _check(self, step: int, loss: torch.Tensor | float | None) -> None:
-        self.checks += 1
-        if self.pairs is None:
-            order = self._order or list(self._all_modules)
-            self.pairs = pair_by_order(order, self._all_kinds, self._all_sizes)
-            self._last_out = None
-            self._act_watch = {self.pairs.get(p, p) for p in self.producers}
-            self._event("structure", step, pairs=self.pairs, relu_after=sorted(self._relu_after))
-            self._event("manifest", step, **self._manifest())
+    # ------------------------------------------------------------------ structure
+    def _runs_once(self, name: str) -> int | None:
+        """None if `name` ran exactly once in every forward pass of this sampled window, else the
+        offending call count. With no root forward seen, the window's total count is used."""
+        counts = [f[name] for f in self._profiles] if self._profiles else [self._loose[name]]
+        bad = [c for c in counts if c != 1]
+        return bad[0] if bad else None
 
-        loss_val = None
-        if loss is not None:
-            loss_val = float(loss.detach()) if isinstance(loss, torch.Tensor) else float(loss)
-        names, values, scale = self._grad_norms()
+    def _finish_structure(self, step: int, loss_root: Any) -> None:
+        """Fix pairs, ReLU followers and per-layer certificate eligibility from the first sampled step."""
+        owners: dict[str, list[str]] = {}
+        for bn, srcs in self._feeds.items():
+            src = next(iter(srcs)) if len(srcs) == 1 else None
+            if src is not None and self._all_sizes.get(src) == self._all_sizes.get(bn):
+                owners.setdefault(src, []).append(bn)
+        self.pairs = {p: bns[0] for p, bns in owners.items() if len(bns) == 1}
+
+        roots = [loss_root] if loss_root is not None else self._root_fns
+        self.graph_source = None if not roots else "loss" if loss_root is not None else "model outputs"
+        parents = _graph_parents(roots) if roots else {}
+
+        offset = 0
+        for name in self.producers:
+            prod = self.modules[name]
+            weight = getattr(prod, "weight", None)
+            if weight is None or weight.dim() < 2:
+                continue
+            bn_name = self.pairs.get(name)
+            relu = (bn_name or name) in self._relu_after
+            reason = self._static_reason(name, bn_name, relu, parents) if self._channel_checks else None
+            self._chains.append(_Chain(name=name, prod=prod, bn=self._all_modules[bn_name] if bn_name else None,
+                                       bn_name=bn_name, out_name=bn_name or name, n=weight.shape[0],
+                                       offset=offset, relu=relu, reason=reason))
+            offset += weight.shape[0]
+        self._silent_all = torch.zeros(offset, dtype=torch.long)
+        self._streak_all = torch.zeros(offset, dtype=torch.long)
+        self._layer_id = torch.repeat_interleave(torch.arange(len(self._chains)),
+                                                 torch.tensor([c.n for c in self._chains], dtype=torch.long))
+        self._act_watch = {self.pairs.get(p, p) for p in self.producers}
+        self._event("structure", step, pairs=self.pairs, relu_after=sorted(self._relu_after),
+                    graph=self.graph_source)
+        self._event("manifest", step, **self._manifest())
+        # Detection is over: drop the references it held and the ReLU hooks it needed.
+        self._detecting = False
+        self._outs, self._feeds, self._fn, self._relu_fns, self._root_fns = {}, {}, {}, set(), []
+        for h in self._relu_handles:
+            h.remove()
+
+    def _static_reason(self, name: str, bn_name: str | None, relu: bool, parents: dict) -> str | None:
+        """Why a producer can never be certified in this run, or None."""
+        if not relu:
+            return ("no ReLU module directly consumes the output (residual add, other activation, "
+                    "or a functional relu)")
+        if self.optimizer is None:
+            return "no optimizer given, so the momentum condition cannot be checked"
+        if self._opt is None:
+            return (f"{type(self.optimizer).__name__} is not a torch.optim.Optimizer, so its momentum "
+                    "cannot be read")
+        if self._family is None:
+            return (f"{type(self._opt).__name__} is not an optimizer the certificate covers (SGD, Adam, "
+                    "AdamW, NAdam, RAdam, Adamax; others via MonitorConfig.certify_optimizers)")
+        for mod in (name, bn_name):
+            if mod is not None:
+                calls = self._runs_once(mod)
+                if calls is not None:
+                    return f"{mod} ran {calls} times in one forward pass (a shared or skipped module)"
+        if not parents:
+            return ("no autograd graph at the first check: step() got no loss with a grad_fn and the "
+                    "model's outputs had none")
+        node = self._fn.get(name)
+        if node is None:
+            return f"no autograd node recorded for {name} (its forward ran without gradients)"
+        consumer, why = _sole_consumer(parents, node)
+        if why is not None:
+            return f"the output of {name} {why}"
+        if bn_name is not None:
+            if consumer is not self._fn.get(bn_name):
+                return f"the output of {name} does not go into {bn_name} alone"
+            consumer, why = _sole_consumer(parents, consumer)
+            if why is not None:
+                return f"the output of {bn_name} {why}"
+        if consumer not in self._relu_fns:
+            return f"the output of {bn_name or name} is not consumed by a ReLU module alone"
+        return None
+
+    # ------------------------------------------------------------------ checks
+    def _check(self, step: int, loss: torch.Tensor | float | None, loss_root: Any) -> None:
+        self.checks += 1
+        if self._detecting:
+            self._finish_structure(step, loss_root)
+        if isinstance(loss, torch.Tensor) and loss.numel() != 1:
+            if loss.numel() > 0 and "loss_reduced" not in self._warned:
+                self._warned.add("loss_reduced")
+                self._event("loss_reduced", step, f"step() got a loss with {loss.numel()} elements; "
+                            "recording its mean (pass loss.mean() to silence this)",
+                            severity="info", elements=loss.numel())
+            loss = loss.detach().float().mean() if loss.numel() > 0 else None
+
+        names, values, loss_val, scale = self._read_scalars(loss)
         skipped = scale is not None and any(not math.isfinite(g) for g in values)
         # A step the scaler skips does not move the loss baseline either; a non-finite loss is
         # still reported.
         if loss_val is not None and not (skipped and math.isfinite(loss_val)):
             self._check_loss(step, loss_val)
 
+        if not names:
+            self.counts["checks_without_gradients"] += 1
+            if "no_gradients" not in self._warned:
+                self._warned.add("no_gradients")
+                msg = "no gradients on any watched layer — call mon.step() after loss.backward()"
+                self._event("no_gradients", step, msg, severity="warning", message=msg)
         grads = self._check_gradients(step, names, values, skipped, scale)
         stuck = self._check_channels(step) if self._channel_checks else {}
         row = {"step": step, "loss": loss_val, "grad": grads, "stuck": stuck}
@@ -448,6 +748,8 @@ class Monitor:
             self._metrics.write(_dumps(row) + "\n")
             self._emit("metrics", row)
         self._act_max.clear()
+        self._profiles.clear()
+        self._loose.clear()
 
     def _scaler_on(self) -> bool:
         return self.scaler is not None and bool(self.scaler.is_enabled())
@@ -464,20 +766,41 @@ class Monitor:
                 unscaled = True
         return float(self.scaler.get_scale()), not unscaled
 
-    def _grad_norms(self) -> tuple[list[str], list[float], float | None]:
+    def _read_scalars(self, loss: torch.Tensor | float | None
+                      ) -> tuple[list[str], list[float], float | None, float | None]:
+        """(layers with gradients, their gradient norms, the loss, the scaler's scale), with one
+        host read per device holding gradients. Norms are stacked per device, so a model split
+        across devices never stacks tensors from two devices."""
         names, norms = [], []
         for n, m in self.modules.items():
             gs = [p.grad for p in m.parameters(recurse=False) if p.grad is not None]
             if gs:
                 names.append(n)
-                norms.append(torch.linalg.vector_norm(torch.stack([_norm32(g) for g in gs])))
-        if not names:
-            return [], [], None
-        stacked = torch.stack(norms).float()
-        scale, scaled = self._scale_state()
-        if scaled:
-            stacked = stacked / scale
-        return names, stacked.cpu().tolist(), scale
+                dev = gs[0].device
+                norms.append(torch.linalg.vector_norm(torch.stack([_norm32(g).to(dev) for g in gs])))
+        loss_t = loss.detach() if isinstance(loss, torch.Tensor) else None
+        loss_val = float(loss) if loss is not None and loss_t is None else None
+        scale, scaled = self._scale_state() if names else (None, False)
+        by_dev: dict[torch.device, list[int]] = {}
+        for i, t in enumerate(norms):
+            by_dev.setdefault(t.device, []).append(i)
+        values: list[float] = [0.0] * len(norms)
+        for dev, idx in by_dev.items():
+            stacked = torch.stack([norms[i] for i in idx]).float()
+            if scaled:
+                stacked = stacked / scale
+            # The loss rides along with the norms when that is exact (same device, <= 32 bits).
+            with_loss = loss_t is not None and loss_t.device == dev and loss_t.dtype in (torch.float32,) + _HALF
+            if with_loss:
+                stacked = torch.cat([stacked, loss_t.reshape(1).float()])
+            got = stacked.cpu().tolist()
+            if with_loss:
+                loss_val, loss_t = got.pop(), None
+            for i, v in zip(idx, got):
+                values[i] = v
+        if loss_t is not None:
+            loss_val = float(loss_t)
+        return names, values, loss_val, scale
 
     def _check_loss(self, step: int, x: float) -> None:
         cfg = self.config
@@ -563,103 +886,177 @@ class Monitor:
             b.alarm = None
         b.update(x, cfg.baseline_rate_floor)
 
+    @staticmethod
+    def _channel_params(ch: _Chain) -> list[torch.Tensor]:
+        ps = [ch.prod.weight, getattr(ch.prod, "bias", None)]
+        if ch.bn is not None:
+            ps += [getattr(ch.bn, "weight", None), getattr(ch.bn, "bias", None)]
+        return [p for p in ps if p is not None]
+
+    def _layer_reason(self, ch: _Chain, step: int, groups: dict[int, dict]) -> str | None:
+        """Why `ch` may not be certified at this check, or None. Structural reasons stick."""
+        if ch.reason is None and ch.bn is not None and not ch.bn.training:
+            return f"BatchNorm {ch.bn_name} is in eval mode (running statistics can reopen the ReLU)"
+        if ch.reason is None and (self._profiles or self._loose):
+            for mod in (ch.name, ch.bn_name):
+                calls = self._runs_once(mod) if mod is not None else None
+                if calls is not None:
+                    ch.reason = (f"{mod} ran {calls} times in one forward pass at step {step:,}, unlike "
+                                 "at the first check (the graph changed)")
+                    break
+        if ch.reason is not None:
+            return ch.reason
+        shift = getattr(ch.bn, "bias", None) if ch.bn is not None else getattr(ch.prod, "bias", None)
+        gamma = getattr(ch.bn, "weight", None) if ch.bn is not None else None
+        for p in (shift, gamma):
+            group = groups.get(id(p)) if p is not None else None
+            if group is not None:
+                why = decay_reason(self._opt, self._family, group)
+                if why is not None:
+                    return why
+        for p in self._channel_params(ch):
+            if p.requires_grad and p.grad is None:
+                return f"no gradient on {ch.name} at this check"
+        return None
+
+    def _flags(self, ch: _Chain, may_certify: bool) -> torch.Tensor:
+        """Per-channel flag bits for one layer, as a uint8 tensor on the weights' device."""
+        prod, bn, n = ch.prod, ch.bn, ch.n
+        bias = getattr(prod, "bias", None)
+        gamma = getattr(bn, "weight", None) if bn is not None else None
+        beta = getattr(bn, "bias", None) if bn is not None else None
+        m = channel_masks(prod.weight, bias, gamma, beta, rel_tol=self.config.decayed_rel_tol)
+        dev = m.certified.device
+
+        def bit(mask: torch.Tensor, value: int) -> torch.Tensor:
+            return mask.to(torch.uint8) * value
+
+        flags = bit(m.certified, _CAND) | bit(m.flat, _FLAT)
+        if ch.relu:
+            flags |= bit(m.decayed, _DECAYED)
+        if may_certify:
+            # Each way of being constant depends on different state: a zero filter needs the
+            # filter, bias and shift to stay put; a zero scale needs the scale and shift to.
+            shift = beta if bn is not None else bias
+            zero_ok = m.zero_case & ~moving_mask(self._opt, self._family, [prod.weight, bias, shift], n, dev)
+            gamma_ok = m.gamma_case & ~moving_mask(self._opt, self._family, [gamma, shift], n, dev)
+            passes = zero_ok | gamma_ok
+            # Defence in depth: whatever the structure analysis concluded, a channel whose filter
+            # row, bias, scale or shift has a nonzero (or non-finite) gradient now is not dead.
+            live = torch.zeros(n, dtype=torch.bool, device=dev)
+            for p in self._channel_params(ch):
+                if p.grad is not None:
+                    live |= _dense_grad(p.grad).reshape(n, -1).ne(0).any(dim=1).to(dev)
+            flags |= bit(passes & ~live, _CERT) | bit(m.certified & ~passes, _R_MOMENTUM) | \
+                bit(passes & live, _R_GRADIENT)
+        act = self._act_max.get(ch.out_name)
+        if ch.relu and act is not None and act.numel() == n:
+            flags |= bit(act.reshape(-1).to(dev) <= 0, _QUIET) | _ACT
+        return flags
+
     def _check_channels(self, step: int) -> dict[str, list[int]]:
         cfg = self.config
-        replicated = self.dist_mode in ("ddp", "distributed")
+        chains = self._chains
+        if not chains:
+            return {}
+        groups = {id(p): g for g in self._opt.param_groups for p in g["params"]} if self._family else {}
+        reasons = [self._layer_reason(ch, step, groups) for ch in chains]
+        # Device side: every layer's flags, then one host read per device.
+        flags = [self._flags(ch, r is None) for ch, r in zip(chains, reasons)]
+        by_dev: dict[torch.device, list[int]] = {}
+        for i, f in enumerate(flags):
+            by_dev.setdefault(f.device, []).append(i)
+        host: list[torch.Tensor] = list(flags)
+        for idx in by_dev.values():
+            got = torch.cat([flags[i] for i in idx]).cpu().split([chains[i].n for i in idx])
+            for i, t in zip(idx, got):
+                host[i] = t
+        F = torch.cat(host).long()
+
+        # Host side, vectorised over every channel of every layer (CPU tensors, no device reads).
+        def has(b: int) -> torch.Tensor:
+            return (F & b) != 0
+        cert, cand, act, quiet = has(_CERT), has(_CAND), has(_ACT), has(_QUIET)
+        flat = has(_FLAT) | (cand & ~cert)
+        decayed = has(_DECAYED)
+        silent = self._silent_all
+        silent[act & quiet] += 1
+        silent[act & ~quiet] = 0
+        # "Silent" needs no positive output on any input for `patience` checks in a row.
+        observed = (silent >= cfg.patience) & act & ~cert & ~flat & ~decayed
+        # Under torch.distributed every rank must make the same repair decision. Weights are
+        # identical across DDP replicas; activations are not, so "silent" is never a target.
+        silent_target = self.repair_mode == "all" and self.dist_mode not in ("ddp", "distributed")
+        targets = cert | flat | decayed | (observed if silent_target else torch.zeros_like(cert))
+        streak = self._streak_all
+        streak[targets] += 1
+        streak[~targets] = 0
+        if self.repair_mode:
+            # Proven-dead channels cannot recover, so waiting longer than one confirming
+            # check gains nothing; unproven cases wait `patience` checks.
+            due = (streak >= cfg.patience) | (cert & (streak >= cfg.certified_repair_streak))
+        else:
+            due = torch.zeros_like(cert)
+        per_layer = torch.zeros(len(chains), 8, dtype=torch.long).index_add_(
+            0, self._layer_id, torch.stack([cert, flat, observed, decayed, due, cand,
+                                            has(_R_MOMENTUM), has(_R_GRADIENT)], 1).long()).tolist()
+
         out = {}
-        for name in self.producers:
-            prod = self.modules[name]
-            bn = self._all_modules.get(self.pairs.get(name, ""))
-            weight = getattr(prod, "weight", None)
-            if weight is None or weight.dim() < 2:
-                continue
-            n = weight.shape[0]
-            scan = scan_channels(weight, getattr(prod, "bias", None),
-                                 getattr(bn, "weight", None) if bn is not None else None,
-                                 getattr(bn, "bias", None) if bn is not None else None,
-                                 rel_tol=cfg.decayed_rel_tol)
-            out_name = self.pairs.get(name) if bn is not None else name
-            feeds_relu = out_name in self._relu_after
-            # The certificate needs a ReLU directly after the layer, BatchNorm in training mode,
-            # and no optimizer momentum left that could still move the channel (so it needs the
-            # optimizer to check). Otherwise a zero channel is only reported as constant.
-            can_certify = feeds_relu and self._opt is not None and (bn is None or bn.training)
-            certified = set(scan.certified) if can_certify else set()
-            if certified:
-                moving = first_moment_mask(self._opt, prod, bn)
-                certified = {c for c in certified if not moving[c]}
-            flat = set(scan.flat) | (set(scan.certified) - certified)
-            decayed = set(scan.decayed) if feeds_relu else set()
-            # "Silent" needs no positive output on any input for `patience` checks in a row,
-            # not just one batch.
-            observed: set[int] = set()
-            act = self._act_max.get(out_name)
-            if feeds_relu and act is not None and act.numel() == n:
-                quiet = self._silent.setdefault(name, torch.zeros(n, dtype=torch.long))
-                now = (act.float().cpu() <= 0)
-                quiet[now] += 1
-                quiet[~now] = 0
-                observed = set((quiet >= cfg.patience).nonzero().flatten().tolist()) - certified - flat - decayed
+        lim = cfg.list_limit
+        for ch, reason, counts in zip(chains, reasons, per_layer):
+            n_cert, n_flat, n_obs, n_dec, n_due, n_cand, n_mom, n_grad = counts
+            name, n, sl = ch.name, ch.n, slice(ch.offset, ch.offset + ch.n)
 
-            # Under torch.distributed every rank must make the same repair decision. Weights are
-            # identical across DDP replicas; activations are not, so "silent" is never a target.
-            silent_target = self.repair_mode == "all" and not replicated
-            mask = torch.zeros(n, dtype=torch.bool)
-            targets = certified | flat | decayed | (observed if silent_target else set())
-            if targets:
-                mask[list(targets)] = True
-            streak = self._streak.setdefault(name, torch.zeros(n, dtype=torch.long))
-            streak[mask] += 1
-            streak[~mask] = 0
-            out[name] = [len(certified), len(flat), len(observed), len(decayed)]
-
-            stuck = len(certified | flat | observed | decayed)
+            def ids(mask: torch.Tensor, sl: slice = sl) -> list[int]:
+                return mask[sl].nonzero().flatten().tolist()
+            out[name] = [n_cert, n_flat, n_obs, n_dec]
+            stuck = n_cert + n_flat + n_obs + n_dec      # the four sets are disjoint
             level = _level(stuck, n)
             if level != self._channel_level.get(name, "none"):
                 if level != "none":
                     self.counts["stuck_layers"] += 1
                 parts = []
-                if certified:
-                    parts.append(f"{len(certified)} certified dead")
-                if flat:
-                    parts.append(f"{len(flat)} flat")
-                if decayed:
-                    parts.append(f"{len(decayed)} decayed to ~0")
-                if observed:
-                    parts.append(f"{len(observed)} silent for several checks")
+                if n_cert:
+                    parts.append(f"{n_cert} certified dead")
+                if n_flat:
+                    parts.append(f"{n_flat} flat")
+                if n_dec:
+                    parts.append(f"{n_dec} decayed to ~0")
+                if n_obs:
+                    parts.append(f"{n_obs} silent for several checks")
                 msg = (f"{name} ({self.kinds[name]}): {stuck}/{n} channels stuck: " + ", ".join(parts)
                        if level != "none" else f"{name}: all channels active again")
-                lim = cfg.list_limit
                 self._event("channels" if level != "none" else "channels_cleared", step, msg,
                             severity="warning" if level != "none" else "info", layer=name,
-                            batchnorm=self.pairs.get(name), channels=n, level=level,
-                            n_certified=len(certified), n_flat=len(flat), n_observed=len(observed),
-                            n_decayed=len(decayed),
-                            certified=sorted(certified)[:lim], flat=sorted(flat)[:lim],
-                            observed=sorted(observed)[:lim])
+                            batchnorm=ch.bn_name, channels=n, level=level,
+                            n_certified=n_cert, n_flat=n_flat, n_observed=n_obs, n_decayed=n_dec,
+                            certified=ids(cert)[:lim], flat=ids(flat)[:lim], observed=ids(observed)[:lim])
                 self._channel_level[name] = level
-            if certified and name not in self._certified_seen:
+            if n_cert and name not in self._certified_seen:
                 self._certified_seen.add(name)
-                self._event("certificate", step, severity="proof", layer=name, batchnorm=self.pairs.get(name),
-                            channels=sorted(certified)[:cfg.channel_list_limit], count=len(certified),
+                self._event("certificate", step, severity="proof", layer=name, batchnorm=ch.bn_name,
+                            channels=ids(cert)[:cfg.channel_list_limit], count=n_cert,
                             statement="incoming filter or BatchNorm scale is exactly zero and the "
                                       "BatchNorm shift is <= 0: the ReLU is closed for every input, "
                                       "so every gradient into these channels is exactly zero "
                                       "(Theorem 2, absorbing dead set)",
                             assumes=["ReLU follows", "BatchNorm in training mode",
-                                     "optimizer momentum for the channel has decayed"])
-
-            if self.repair_mode:
-                # Proven-dead channels cannot recover, so waiting longer than one confirming
-                # check gains nothing; unproven cases wait `patience` checks.
-                proven = torch.zeros(n, dtype=torch.bool)
-                if certified:
-                    proven[list(certified)] = True
-                due = ((streak >= cfg.patience) | (proven & (streak >= cfg.certified_repair_streak))
-                       ).nonzero().flatten()
-                if due.numel():
-                    self._repair(step, name, prod, bn, due)
-                    streak[due] = 0
+                                     "optimizer momentum for the channel has decayed",
+                                     "the ReLU is the BatchNorm output's only consumer",
+                                     "the channel's gradient is exactly zero at this check",
+                                     "weight decay cannot lift the shift above zero"])
+            refusals = [(n_cand, reason)] if reason is not None else [
+                (n_mom, "the optimizer still holds momentum for these channels"),
+                (n_grad, "these channels have a nonzero gradient at this check")]
+            for count, why in refusals:
+                if count and (name, why) not in self._refused_seen:
+                    self._refused_seen.add((name, why))
+                    self._event("certificate_refused", step, severity="info", layer=name,
+                                batchnorm=ch.bn_name, count=count, reason=why)
+            if n_due:
+                idx = due[sl].nonzero().flatten()
+                self._repair(step, name, ch.prod, ch.bn, idx)
+                streak[idx + ch.offset] = 0
         return out
 
     def _repair_seed(self) -> int | None:
@@ -693,34 +1090,35 @@ class Monitor:
     def _manifest(self) -> dict[str, Any]:
         """Which mechanisms are actually active for this model and run."""
         notes = []
-        if self._channel_checks:
-            reason_off = None
-        else:
+        reason_off = None
+        if not self._channel_checks:
             reason_off = ("parameters are sharded (FSDP): per-channel weight scans, the dead-channel "
                           "certificate and repair are disabled")
             notes.append(reason_off)
+        if self.optimizer is not None and self._opt is None:
+            notes.append(f"{type(self.optimizer).__name__} is not a torch.optim.Optimizer: no certificate "
+                         "and no repair; alarms and the record work")
+        elif self._opt is not None and self._family is None:
+            notes.append(f"{type(self._opt).__name__} is not an optimizer the certificate covers: no "
+                         "certificate, so no channel is repaired early as proven dead; flat and decayed "
+                         "channels are still found (and repaired, if enabled)")
+        chains = {c.name: c for c in self._chains}
         producers = []
         for name in self.producers:
-            prod = self.modules[name]
-            bn_name = self.pairs.get(name) if self.pairs.get(name) in self._all_modules else None
-            relu = (bn_name or name) in self._relu_after
-            weight = getattr(prod, "weight", None)
-            if reason_off:
-                why = reason_off
-            elif weight is None or weight.dim() < 2:
-                why = "no 2-D weight to scan"
-            elif not relu:
-                why = "no ReLU module directly consumes the output (residual add, other activation, " \
-                      "or a functional relu)"
-            elif self._opt is None:
-                why = "no optimizer given, so the momentum condition cannot be checked"
-            else:
-                why = None
+            ch = chains.get(name)
+            bn_name = self.pairs.get(name)
+            why = reason_off or (ch.reason if ch is not None else "no 2-D weight to scan")
             producers.append({"layer": name, "kind": self.kinds[name], "batchnorm": bn_name,
-                              "relu_after": relu, "certificate": why is None, "reason": why})
+                              "relu_after": (bn_name or name) in self._relu_after,
+                              "certificate": why is None, "reason": why})
         if any(p["certificate"] for p in producers):
             notes.append("a certificate is issued per channel only if, at that check, the optimizer "
-                         "holds no first-moment momentum for it and its BatchNorm is in training mode")
+                         "holds no first-moment momentum for it, its gradient is exactly zero, its "
+                         "BatchNorm is in training mode and weight decay cannot lift its shift above 0")
+            notes.append("the producer -> BatchNorm -> ReLU structure is read from the autograd graph of "
+                         f"the first check (from the {self.graph_source}); a later change in how often a "
+                         "module runs revokes eligibility, other graph changes are caught by the "
+                         "per-check gradient guard")
         replicated = self.dist_mode in ("ddp", "distributed")
         targets = []
         if self.repair_mode:
@@ -747,6 +1145,8 @@ class Monitor:
                        "filter": self.layer_patterns},
             "producers": producers,
             "channel_checks": self._channel_checks,
+            "optimizer": {"type": type(self.optimizer).__name__ if self.optimizer is not None else None,
+                          "certificate_family": self._family},
             "repair": {"mode": self.repair_mode, "targets": targets,
                        "rng": self._rng_description() if self.repair_mode else None,
                        "modification_class": MODIFICATION_CLASS, "bound": None},

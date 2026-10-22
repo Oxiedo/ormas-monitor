@@ -20,7 +20,10 @@ def _positive_int(text: str) -> int:
 
 
 def register(sub) -> None:
-    r = sub.add_parser("report", help="rebuild the reports of a monitored run")
+    r = sub.add_parser("report", help="rebuild the reports of a monitored run",
+                       description="Rebuild the engineer report (report.html) and the executive summary "
+                                   "(summary.html, summary.md) of a monitored run from its record. Nothing "
+                                   "is uploaded. A dollar ESTIMATE appears only when --gpu-hour-cost is given.")
     r.add_argument("run", help="run directory (holds diary.jsonl)")
     r.add_argument("--gpu-hour-cost", type=_positive_float, default=None, metavar="PRICE",
                    help="price of one GPU-hour; adds a dollar ESTIMATE of time spent stuck to the summary")

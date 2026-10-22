@@ -3,17 +3,21 @@
 A channel is *certified dead* when its BatchNorm output is a constant <= 0 for every input.
 The ReLU after it is then closed everywhere, every gradient into the channel is exactly
 zero, and plain SGD or AdamW can never move it again (Raadh 2026, Theorem 2). Two weight
-patterns make the BatchNorm output constant in training mode:
+patterns make the BatchNorm output exactly constant in training mode:
 
-  * the incoming filter is all zero, so the BatchNorm input is the same everywhere
-    and its normalised value is 0, leaving only the shift beta;
+  * the incoming filter is all zero AND the producer has no bias or a bias of exactly 0, so the
+    BatchNorm input is exactly 0 everywhere and its normalised value is exactly 0, leaving only
+    the shift beta. (With a nonzero bias the input is a constant that the batch mean does not
+    cancel exactly in floating point: the output sits up to ~1e-3 off beta, so beta = 0 does not
+    close the ReLU. Such channels are reported as flat or decayed, never certified.)
   * the BatchNorm scale gamma is 0, which removes the normalised value directly.
 
 Either way the output equals beta, so beta <= 0 closes the ReLU for good.
 A constant channel with beta > 0 is *flat*: alive, but it carries no information.
 
-Assumptions the certificate needs (and the report states): a ReLU follows the BatchNorm,
-BatchNorm runs in training mode, and the optimiser's momentum for the channel has decayed.
+Assumptions the certificate needs (and the report states): a ReLU is the only consumer of the
+BatchNorm output, BatchNorm runs in training mode, and the optimiser's momentum for the channel
+has decayed. The live monitor checks these; `scan_channels` reads weights only.
 """
 from __future__ import annotations
 
@@ -37,18 +41,75 @@ class ChannelScan:
     channels: int = 0
 
 
+@dataclass(frozen=True)
+class ChannelMasks:
+    """Per-channel boolean masks on the weights' device (see `channel_masks`).
+
+    `zero_case`: zero filter (and zero or no producer bias) with shift <= 0; `gamma_case`: zero
+    BatchNorm scale with shift <= 0. `certified` is their union; the live monitor needs the two
+    cases apart because each depends on different optimizer state.
+    """
+    certified: torch.Tensor
+    flat: torch.Tensor
+    decayed: torch.Tensor
+    zero_case: torch.Tensor
+    gamma_case: torch.Tensor
+
+
 def zero_rows(weight: torch.Tensor) -> torch.Tensor:
     """Boolean mask over output channels whose incoming weights are all exactly zero."""
     return (weight.detach().reshape(weight.shape[0], -1).abs().amax(dim=1) == 0).cpu()
 
 
 def _tiny(values: torch.Tensor, rel_tol: float) -> torch.Tensor:
-    """Entries that are nonzero but negligible next to the layer's typical magnitude."""
-    values = values.float().abs().cpu()
-    nonzero = values[values > 0]
-    if nonzero.numel() == 0:
-        return torch.zeros_like(values, dtype=torch.bool)
-    return (values > 0) & (values <= rel_tol * nonzero.median())
+    """Entries that are nonzero but negligible next to the layer's typical magnitude (on device).
+
+    The median is over the nonzero entries (torch's lower median), computed without boolean
+    indexing so it never synchronises with the host.
+    """
+    values = values.detach().float().abs()
+    med = torch.nanmedian(torch.where(values > 0, values, torch.full_like(values, float("nan"))))
+    return (values > 0) & (values <= rel_tol * med)      # all-zero layer: med is nan, all False
+
+
+def channel_masks(weight: torch.Tensor | None, bias: torch.Tensor | None,
+                  gamma: torch.Tensor | None, beta: torch.Tensor | None,
+                  rel_tol: float = DECAYED_REL_TOL) -> ChannelMasks:
+    """`scan_channels` as device-side masks, with no host read. Needs `weight` or `gamma`."""
+    assert weight is not None or gamma is not None, "channel_masks needs a filter or a BatchNorm scale"
+    ref = weight if weight is not None else gamma
+    n, dev = ref.shape[0], ref.device
+    no = torch.zeros(n, dtype=torch.bool, device=dev)
+    if weight is not None:
+        row_max = weight.detach().reshape(n, -1).abs().amax(dim=1)
+        zero_filter = row_max == 0
+    else:
+        row_max, zero_filter = None, no
+    bias_zero = bias.detach().reshape(-1) == 0 if bias is not None else ~no
+
+    if beta is not None:
+        shift = beta.detach().reshape(-1)
+        exact_zero = zero_filter & bias_zero
+        gamma_zero = (gamma.detach().reshape(-1) == 0) if gamma is not None else no
+        # Zero filter, nonzero bias: constant only up to float rounding inside BatchNorm.
+        near_constant = zero_filter & ~bias_zero & ~gamma_zero
+    else:
+        # No BatchNorm: a zero filter outputs exactly its bias (or 0 when there is no bias).
+        shift = bias.detach().reshape(-1) if bias is not None else torch.zeros(n, device=dev)
+        exact_zero, gamma_zero, near_constant = zero_filter, no, no
+
+    closed = shift <= 0
+    constant = exact_zero | gamma_zero
+    zero_case, gamma_case = exact_zero & closed, gamma_zero & closed
+    near = near_constant.clone()
+    if row_max is not None:
+        near |= _tiny(row_max, rel_tol)
+    if beta is not None and gamma is not None:
+        near |= _tiny(gamma.reshape(-1), rel_tol)
+    return ChannelMasks(certified=zero_case | gamma_case,
+                        flat=(constant | near_constant) & ~closed,
+                        decayed=near & ~constant & closed,
+                        zero_case=zero_case, gamma_case=gamma_case)
 
 
 def scan_channels(weight: torch.Tensor | None, bias: torch.Tensor | None,
@@ -59,54 +120,17 @@ def scan_channels(weight: torch.Tensor | None, bias: torch.Tensor | None,
     `weight`/`bias` belong to the producer (Conv or Linear); `gamma`/`beta` to the BatchNorm
     that follows it, or None when there is none. *Decayed* channels have a filter or BatchNorm
     scale that is not exactly zero but below `rel_tol` x the layer's median, with shift <= 0:
-    the signature of a channel that died and was then shrunk by weight decay.
+    the signature of a channel that died and was then shrunk by weight decay. A zero filter
+    with a nonzero producer bias in front of a BatchNorm is only nearly constant, so it is
+    flat (shift > 0) or decayed (shift <= 0), never certified.
     """
     if weight is None and gamma is None:
         return ChannelScan()
-    n = weight.shape[0] if weight is not None else gamma.shape[0]
-    zero_filter = zero_rows(weight) if weight is not None else torch.zeros(n, dtype=torch.bool)
-
-    if beta is not None:
-        # BatchNorm present: output is constant if the filter or gamma is zero; it equals beta.
-        constant = zero_filter.clone()
-        if gamma is not None:
-            constant |= gamma.detach().reshape(-1).cpu() == 0
-        shift = beta.detach().reshape(-1).cpu()
-    else:
-        # No BatchNorm: a zero filter outputs its bias (or 0 when there is no bias).
-        constant = zero_filter
-        shift = bias.detach().reshape(-1).cpu() if bias is not None else torch.zeros(n)
-
-    constant = constant.cpu()
-    certified = constant & (shift <= 0)
-    flat = constant & (shift > 0)
-    near = torch.zeros(n, dtype=torch.bool)
-    if weight is not None:
-        near |= _tiny(weight.detach().reshape(n, -1).abs().amax(dim=1), rel_tol)
-    if beta is not None and gamma is not None:
-        near |= _tiny(gamma.detach().reshape(-1), rel_tol)
-    decayed = near & ~constant & (shift <= 0)
-    return ChannelScan(certified=certified.nonzero().flatten().tolist(),
-                       flat=flat.nonzero().flatten().tolist(),
-                       decayed=decayed.nonzero().flatten().tolist(), channels=n)
-
-
-def pair_by_order(order: list[str], kinds: dict[str, str], sizes: dict[str, int]) -> dict[str, str]:
-    """Pair each BatchNorm with the Conv/Linear that ran just before it.
-
-    `order` is module names in the order they executed in one forward pass.
-    Returns {producer_name: batchnorm_name}.
-    """
-    pairs: dict[str, str] = {}
-    prev = None
-    for name in order:
-        kind = kinds.get(name)
-        if kind in BN_KINDS and prev is not None:
-            if kinds.get(prev) in CONV_KINDS and sizes.get(prev) == sizes.get(name):
-                pairs[prev] = name
-        if kind in CONV_KINDS or kind in BN_KINDS:
-            prev = name
-    return pairs
+    m = channel_masks(weight, bias, gamma, beta, rel_tol)
+    packed = torch.stack([m.certified, m.flat, m.decayed]).cpu()
+    return ChannelScan(certified=packed[0].nonzero().flatten().tolist(),
+                       flat=packed[1].nonzero().flatten().tolist(),
+                       decayed=packed[2].nonzero().flatten().tolist(), channels=packed.shape[1])
 
 
 def relu_followers(model: torch.nn.Module, example: torch.Tensor) -> set[str]:

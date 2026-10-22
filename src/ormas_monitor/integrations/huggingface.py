@@ -16,7 +16,11 @@ Hooks used (transformers 4.57 ``Trainer._inner_training_loop``):
   accumulation is handled), after every micro-batch's backward and **after gradient clipping**
   (``max_grad_norm``, default 1.0), immediately before ``optimizer.step()``.
 * ``on_train_end``: close the monitor (``run_end`` and reports). The Trainer has no exception hook;
-  if training raises, call ``callback.close()`` yourself.
+  if training raises, call ``callback.close()`` yourself from ``except``/``finally`` (it never
+  raises: the monitor prints a failure to stderr and your exception propagates unchanged).
+
+If the Trainer's optimizer holds no torch optimizer over the model's own parameters (DeepSpeed,
+custom wrappers), the monitor runs without it: no repair and no certificate, one line says so.
 
 Loss: callbacks never receive the training loss. This callback reads the ``loss`` the model itself
 returns (``outputs["loss"]`` / ``outputs.loss`` / ``outputs[0]`` when labels are given) with a
@@ -41,8 +45,8 @@ except ImportError as e:
                       'pip install "ormas-monitor[huggingface]"') from e
 
 from ..monitor import Monitor
-from ._common import LossWindow, check_monitor_kwargs, unwrap_optimizer
-from .sinks import MLflowSink, TensorBoardSink, WandbSink, close_sinks
+from ._common import LossWindow, check_monitor_kwargs, safe_close, usable_optimizer, without_optimizer
+from .sinks import MLflowSink, TensorBoardSink, WandbSink
 
 
 def _output_loss(output: Any) -> torch.Tensor | None:
@@ -80,6 +84,7 @@ class OrmasMonitorCallback(TrainerCallback):
         self.to_loggers = to_loggers
         self.monitor: Monitor | None = None
         self.report: Any = None
+        self.close_error: BaseException | None = None
         self._active = False
         self._losses = LossWindow()
         self._normalised = False
@@ -93,17 +98,19 @@ class OrmasMonitorCallback(TrainerCallback):
             self._losses.add(loss)
 
     def close(self) -> None:
-        """Close the monitor and sinks; idempotent. Called automatically at train end."""
+        """Close the monitor and sinks; idempotent. Called automatically at train end.
+
+        Never raises, so it is safe in an ``except``/``finally`` around ``trainer.train()``. With
+        no exception pending, a failure to finish the record or reports is logged and kept in
+        ``self.close_error``; while one propagates, the monitor prints the failure to stderr.
+        """
         if self._handle is not None:
             self._handle.remove()
             self._handle = None
         if not self._active or self.monitor is None:
             return
         self._active = False
-        try:
-            self.report = self.monitor.close(report=self.write_report)
-        finally:
-            close_sinks(self._sinks)
+        self.report, self.close_error = safe_close(self.monitor, self._sinks, self.write_report)
 
     # ------------------------------------------------------------------ Trainer hooks
     def on_train_begin(self, args: Any, state: Any, control: Any, model: nn.Module | None = None,
@@ -111,8 +118,12 @@ class OrmasMonitorCallback(TrainerCallback):
         self.close()
         if model is None:
             raise RuntimeError("OrmasMonitorCallback: the Trainer passed no model to on_train_begin")
-        opt = unwrap_optimizer(optimizer) if optimizer is not None else None
         mkw = dict(self.monitor_kwargs)
+        opt = None
+        if optimizer is not None:
+            opt, reason = usable_optimizer(optimizer, model)
+            if opt is None:
+                mkw = without_optimizer(mkw, reason or "", mkw.get("verbose", True))
         mkw.setdefault("out", os.path.join(args.output_dir or ".", "ormas_run"))
         if getattr(args, "run_name", None) and "name" not in mkw:
             mkw["name"] = args.run_name
@@ -124,6 +135,7 @@ class OrmasMonitorCallback(TrainerCallback):
         if scaler is not None and opt is not None:
             mkw.setdefault("scaler", scaler)
         self._losses = LossWindow()
+        self.close_error = None
         self.monitor = Monitor(model, opt, **mkw)
         self._handle = _register_loss_hook(model, self._on_forward)
         self._active = True
@@ -132,7 +144,7 @@ class OrmasMonitorCallback(TrainerCallback):
         mon = self.monitor
         if mon is None or not self._active:
             return
-        loss = self._losses.take(mean=not self._normalised)
+        loss = self._losses.take(mean=not self._normalised, keep_graph=mon.step_count == 0)
         self._normalised = False
         if loss is not None:
             mon.note_loss(loss)
