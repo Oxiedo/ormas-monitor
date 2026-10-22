@@ -1,33 +1,104 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "ormas-monitor"
-version = "0.1.0"
-description = "Training health checks for PyTorch that run on your machine: per-layer alarms, proven dead channels, optional repair, and a tamper-evident record."
+dynamic = ["version"]
+description = "Catch the layer that breaks while your PyTorch model trains, and get proof: per-layer alarms, certified dead channels, optional repair, and a tamper-evident training record."
 readme = "README.md"
-license = { text = "Apache-2.0" }
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
 authors = [{ name = "Rokib Al Dhin Raadh", email = "raadh@oxiedo.com" }]
+maintainers = [{ name = "Oxiedo", email = "raadh@oxiedo.com" }]
 requires-python = ">=3.9"
-dependencies = ["torch>=1.13"]
-keywords = ["pytorch", "training", "monitoring", "dead neurons", "batchnorm", "audit"]
+# torch >= 2.3: the oldest release with the device-generic torch.amp.GradScaler. Everything else the
+# package uses is older: torch.load(mmap=True) is 2.1, torch.load(weights_only=...) is 1.13,
+# torch.linalg.vector_norm is 1.10.
+dependencies = ["torch>=2.3"]
+keywords = [
+  "pytorch", "deep learning", "training", "monitoring", "dead neurons", "dead channels",
+  "batchnorm", "relu", "checkpoint", "model audit", "ml observability",
+]
 classifiers = [
-  "License :: OSI Approved :: Apache Software License",
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Software Development :: Quality Assurance",
+  "Topic :: System :: Monitoring",
+  "Typing :: Typed",
 ]
 
 [project.optional-dependencies]
-safetensors = ["safetensors"]
-demo = ["torchvision"]
-test = ["pytest"]
+safetensors = ["safetensors>=0.4"]
+signing = ["cryptography>=41"]
+lightning = ["lightning>=2.0"]
+# transformers 4.57 is the only version the Trainer callback has been tested with; it relies on
+# TrainerCallback.on_pre_optimizer_step, and the first release that has it was not verified.
+huggingface = ["transformers>=4.57", "accelerate>=0.26", "safetensors>=0.4"]
+tensorboard = ["tensorboard>=2.12"]
+wandb = ["wandb>=0.16"]
+mlflow = ["mlflow>=2.9"]
+demo = ["torchvision>=0.18"]
+all = [
+  "ormas-monitor[safetensors,signing,lightning,huggingface,tensorboard,wandb,mlflow,demo]",
+]
+dev = [
+  "pytest>=7.4",
+  "ruff>=0.5",
+  "build>=1.0",
+  "twine>=5.0",
+  "mkdocs>=1.6,<2",
+  "mkdocs-material>=9.5",
+]
 
 [project.urls]
 Homepage = "https://oxiedo.com"
+Documentation = "https://OWNER.github.io/ormas-monitor/"
+Source = "https://github.com/OWNER/ormas-monitor"
+Issues = "https://github.com/OWNER/ormas-monitor/issues"
+Changelog = "https://github.com/OWNER/ormas-monitor/blob/main/CHANGELOG.md"
 
 [project.scripts]
 ormas-monitor = "ormas_monitor.cli:main"
 
+[tool.setuptools.dynamic]
+version = { attr = "ormas_monitor.__version__" }
+
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+ormas_monitor = ["py.typed"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py39"
+src = ["src", "tests"]
+extend-exclude = ["sample_reports", "scan_results", "demo_runs", "ormas_demo"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B"]
+# E501: line-length is a target, not a gate (report templates hold long HTML strings).
+# E741: the code base uses `l` for "layer" in short comprehensions.
+ignore = ["E501", "E741"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+filterwarnings = [
+  "ignore::DeprecationWarning:torchvision.*",
+  "ignore::DeprecationWarning:lightning.*",
+  "ignore::DeprecationWarning:pytorch_lightning.*",
+  "ignore::DeprecationWarning:transformers.*",
+]

@@ -9,6 +9,7 @@ from ormas_monitor.checkpoint import run as check_file
 from ormas_monitor.cli import main as cli
 from ormas_monitor.diary import Diary, verify
 from ormas_monitor.structure import pair_by_order, scan_channels
+from test_core_helpers import events as read_events
 
 
 def small_cnn():
@@ -98,7 +99,7 @@ def test_certifies_and_repairs_dead_layer(tmp_path):
     mon = Monitor(model, opt, out=tmp_path / "run", repair=True, check_every=5, patience=2, verbose=False)
     train(model, mon, opt, 120, after=(60, lambda: lesion(model[3], model[4], opt)))
     mon.close()
-    events = [json.loads(l) for l in open(tmp_path / "run" / "diary.jsonl")]
+    events = read_events(tmp_path / "run")
     kinds = [e["event"] for e in events]
     cert = next(e for e in events if e["event"] == "certificate")
     assert cert["layer"] == "3" and cert["count"] == 16 and cert["step"] >= 60
@@ -117,7 +118,7 @@ def test_alarm_only_mode_does_not_touch_weights(tmp_path):
     train(model, mon, opt, 80, after=(40, lambda: lesion(model[3], model[4], opt)))
     mon.close()
     assert model[3].weight.abs().max() == 0
-    assert any(json.loads(l)["event"] == "certificate" for l in open(tmp_path / "run" / "diary.jsonl"))
+    assert any(e["event"] == "certificate" for e in read_events(tmp_path / "run"))
 
 
 def test_no_certificate_while_momentum_can_revive(tmp_path):
@@ -126,7 +127,7 @@ def test_no_certificate_while_momentum_can_revive(tmp_path):
     mon = Monitor(model, opt, out=tmp_path / "run", check_every=5, verbose=False)
     train(model, mon, opt, 70, after=(60, lambda: lesion(model[3], model[4])))   # state kept
     mon.close(report=False)
-    events = [json.loads(l) for l in open(tmp_path / "run" / "diary.jsonl")]
+    events = read_events(tmp_path / "run")
     assert not any(e["event"] == "certificate" for e in events)
     assert any(e["event"] == "channels" and e["flat"] for e in events)
 
@@ -146,7 +147,7 @@ def test_no_certificate_through_skip_connection(tmp_path):
         mon.step(loss)
         opt.step()
     mon.close(report=False)
-    events = [json.loads(l)["event"] for l in open(tmp_path / "run" / "diary.jsonl")]
+    events = [e["event"] for e in read_events(tmp_path / "run")]
     assert "certificate" not in events and "bn" not in mon._relu_after
 
 

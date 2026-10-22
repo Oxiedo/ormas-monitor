@@ -1,142 +1,120 @@
 # ormas-monitor
 
-**Find the layer that broke while your model trains, and prove when it can never come back.**
+**Catch the layer that breaks while your model trains, and get proof.**
 
-`ormas-monitor` watches a PyTorch training run layer by layer:
-- it raises an alarm when a layer leaves its own normal range;
-- it proves when a channel has died for good;
-- it can repair the dead channels, if you ask it to;
-- it writes a tamper-evident record of everything that happened.
+[![CI](https://github.com/OWNER/ormas-monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/ormas-monitor/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/ormas-monitor.svg)](https://pypi.org/project/ormas-monitor/)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-It also checks a saved model file with no training and no data. Everything runs on your machine. The monitor and the checker make no network calls (only the optional `demo` downloads CIFAR-10), and the only dependency is PyTorch.
+`ormas-monitor` watches a PyTorch training run layer by layer. Each layer is compared with **its own** history, so the monitor names the layer that failed. When a channel can never recover, it says so with a **certificate**, not a guess. It can repair those channels if you ask, and it writes a tamper-evident record of everything it saw.
 
-**See the output before installing anything:** [`sample_reports/`](sample_reports) has the real reports from the runs below.
+Everything runs on your machine. The core makes no network calls and never reads your data.
 
-```bash
-pip install git+https://github.com/OWNER/ormas-monitor
-ormas-monitor demo        # ~2 min: two layers die; watch-only vs repair (needs torchvision, downloads CIFAR-10)
-```
+## Three ways in
 
-## 1. Check a saved model (no code changes)
+**1. Check a saved model (about a minute, no code changes)**
 
 ```bash
-ormas-monitor check model.pt                       # .pt / .pth / .bin / .safetensors
-ormas-monitor check finetuned.pt --against base.pt # what changed, and what died, between two
-ormas-monitor check model.pt --arch torchvision:resnet50  # exact wiring for a known architecture
+pip install "ormas-monitor[safetensors]"
+ormas-monitor check model.safetensors                  # or .pt / .pth / .bin / .ckpt, or a Hugging Face folder
+ormas-monitor check finetuned.pt --against base.pt     # what changed, and what died
+ormas-monitor check model.pt --fail-on warning         # non-zero exit for a CI gate
 ```
 
-You get a terminal summary and `model.pt.health.html`. The check flags:
-- **NaN/Inf weights** and all-zero tensors.
-- **Certified-dead channels:** channels that provably receive zero gradient forever (see below).
-- **Channels decayed to ~0:** effectively dead channels that weight decay has shrunk almost, but not exactly, to zero.
-- **Constant channels,** and channels that are **probably dormant** (an estimate, labelled as one).
-- **BatchNorm layers whose running variance has collapsed.**
-- **With `--against`:** which tensors moved most, which never moved at all, and which channels died in between.
-
-PyTorch files load with `weights_only=True`, so a checkpoint can't run code on your machine. A file that holds pickled Python objects is refused unless you pass `--trust`.
-
-## 2. Watch a training run (two lines)
+**2. Two lines in a training loop, or one callback**
 
 ```python
 from ormas_monitor import Monitor
 
-mon = Monitor(model, optimizer)          # add repair=True to fix dead channels automatically
+mon = Monitor(model, optimizer)        # repair=True to re-initialise certified-dead channels
 for x, y in loader:
     loss = loss_fn(model(x), y)
     optimizer.zero_grad()
     loss.backward()
-    mon.step(loss)                       # after backward, before optimizer.step()
+    mon.step(loss)                     # after backward, before optimizer.step()
     optimizer.step()
-mon.close()                              # writes ormas_run/report.html
+mon.close()                            # writes ormas_run/report.html and the record
 ```
 
-Every 50 steps (`check_every`), it does the following:
+Using Lightning or the Hugging Face `Trainer`? Add one callback instead, `ormas_monitor.integrations.lightning.OrmasMonitorCallback` or `ormas_monitor.integrations.huggingface.OrmasMonitorCallback`: see [Lightning](docs/guides/lightning.md) and [Hugging Face](docs/guides/huggingface.md).
 
-| What | How |
+**3. Watch it catch a broken layer (about two minutes)**
+
+```bash
+pip install "ormas-monitor[demo]"
+ormas-monitor demo        # CIFAR-10: two layers are zeroed; watch-only vs repair (downloads CIFAR-10 once)
+```
+
+Or open the real reports without installing anything: [`sample_reports/`](sample_reports).
+
+## What it found (verified)
+
+All numbers: one seed (0), one Apple M-series Mac, CIFAR-10 unless stated. Not yet measured on NVIDIA/Linux, multi-GPU or at scale.
+
+| Experiment | Result |
 |---|---|
-| **Layer alarms** | Each layer's gradient norm is compared with *its own* history. An alarm fires when it moves more than 2.5 σ **and** at least 10× away from normal, on two checks in a row. It also fires when the gradient is exactly zero. |
-| **Dead channels** | The exact certificate below, plus channels that output a constant, and channels that produced no positive output on any input for `patience` checks in a row (likely dead, not proven). |
-| **Loss** | Non-finite loss or gradients, and loss spikes (one event per episode). |
-| **Repair** (`repair=True`) | Channels stuck for `patience` checks are re-initialised: Kaiming filter, BatchNorm reset, and the optimizer state for exactly those channels zeroed. |
-| **The record** | `diary.jsonl`, with each event sealed with the SHA-256 of the one before. Check it with `ormas-monitor verify ormas_run`. |
+| Dead-layer demo, full (50k images): conv2 and conv3 zeroed, optimizer state cleared | healthy 78.84% → watch-only **10.00%** for all 12 epochs → with repair **76.77%** (192 channels repaired) |
+| Dead-layer demo, quick (`ormas-monitor demo`) | 61.76% → **10.00%** → **59.12%** (190 channels repaired) |
+| Overhead at `check_every=50` | **+3.6%** median epoch time (12.12 s → 12.55 s) |
+| `check` on torchvision ImageNet models | **19 of 21** BN→ReLU models carry channels decayed to ~0; DenseNet-169: 7,667 of 77,536 (9.9%) |
+| The paper's own StandardCNN | 160 of 256 classifier hidden units never fire on any of the 10,000 test images |
 
-## Why "dead for good" is a proof, not a guess
+Details and exact reproduce commands: [docs/results.md](docs/results.md).
 
-Take a Conv → BatchNorm → ReLU channel whose incoming filter (or BatchNorm scale) is exactly zero:
-1. BatchNorm then outputs the constant β, its shift, for every input.
-2. If β ≤ 0, the ReLU is closed everywhere and every gradient into the channel is exactly zero.
-3. Under SGD or AdamW the channel can therefore never move again. Weight decay only shrinks β toward 0, never past it.
-4. Any repair proportional to the weights, ‖R(W) − W‖ ≤ ρ‖W‖, leaves it at zero too.
+## The certificate, in one paragraph
 
-Only a jump (a re-initialisation) gets out. This is Theorem 2 of *Self-Repair as a Bounded Disturbance* (R. A. D. Raadh, DeepMath 2026).
+In a Conv/Linear → BatchNorm → ReLU channel, if the incoming filter or the BatchNorm scale is exactly zero and the BatchNorm shift is ≤ 0, the ReLU is closed for every input. Every gradient into the channel is then exactly zero, so SGD or AdamW can never revive it (Theorem 2 of the DeepMath 2026 paper below). The monitor issues the certificate only when a ReLU directly consumes the layer's output, the optimizer holds no first-moment momentum for the channel, and BatchNorm is in training mode. [Read more](docs/concepts/dead-channels.md).
 
-The monitor issues the certificate only when all of these hold:
-- a ReLU directly consumes the BatchNorm output. A skip connection added before the ReLU doesn't count, and is detected.
-- the optimizer holds no leftover momentum for the channel. Momentum *can* revive it, and the tests check that case.
+## What it is not
 
-## Results
+- **Not ORMAS.** The ORMAS training architecture is not in this package; this tool needs no architecture change.
+- **Not compliance.** The record is evidence for your technical documentation, not a certificate of compliance with the EU AI Act or anything else.
+- **No proof for transformers or LLMs.** The certificate needs BN→ReLU. Transformers get alarms, loss checks and the record.
+- **Never reads your data.** It cannot find mislabelled examples.
+- **No uploads.** Nothing leaves your machine unless you add a sink that sends data (W&B, MLflow, a webhook).
+- **Not the first to notice dead units.** ReDo (Sokar et al., ICML 2023) and network slimming came first. We claim the certificate and the packaging.
+- **Not yet tested on NVIDIA/Linux, multi-GPU or at scale.**
 
-### The dead-layer experiment (`ormas-monitor demo`)
+Full list: [docs/limitations.md](docs/limitations.md).
 
-This is the experiment from the DeepMath 2026 poster:
-- **Network:** the paper's CIFAR-10 CNN (three Conv-BN-ReLU blocks and an MLP head), trained with AdamW.
-- **The break:** after training, two of the three conv layers are zeroed and the optimizer state is cleared.
-- **The comparison:** from that identical state, one run where the monitor only watches, and one where it also repairs.
+## Install
 
-| Setting | Healthy | Watch only | With repair |
-|---|---:|---:|---:|
-| Full: 50k images, 8 epochs, then 12 after the break | 78.84% | **10.00%** (all 12 epochs) | **76.77%** (192 channels repaired) |
-| Quick (`ormas-monitor demo`): 10k images, 4 + 4 epochs, ~1.5 min | 61.76% | **10.00%** | **59.12%** (190 channels repaired) |
+```bash
+pip install ormas-monitor                     # core: depends only on PyTorch
+pip install "ormas-monitor[safetensors]"      # read .safetensors files
+pip install "ormas-monitor[signing]"          # Ed25519 signing of the record
+pip install "ormas-monitor[lightning]"        # Lightning callback
+pip install "ormas-monitor[huggingface]"      # Hugging Face Trainer callback
+pip install "ormas-monitor[tensorboard]"      # also: [wandb], [mlflow]
+pip install "ormas-monitor[demo]"             # torchvision, for `ormas-monitor demo`
+pip install "ormas-monitor[all]"
+```
 
-- **Watch only:** within one check the monitor certified every channel of both layers as dead, then logged exactly zero gradient for every conv layer. The run then sat at chance for good, as Theorem 2 says it must.
-- **With repair:** the monitor fixed the proven-dead channels at the next check and the network recovered.
+Python 3.9+, PyTorch 2.3+.
 
-It also flagged something nobody had asked about: before any damage, **160 of the 256 hidden units in the CNN's classifier layer** were already silent. We checked them afterwards: they never fire on any of the 10,000 test images (159 never fire on all 50,000 training images). The paper's own baseline network had been carrying 62% dead units in that layer all along.
+## Documentation
 
-Both runs used one seed on an Apple M-series GPU. Reproduce with `ormas-monitor demo --full`.
+[Quickstart](docs/quickstart.md) · [Concepts](docs/concepts/dead-channels.md) · [Guides](docs/guides/pytorch.md) · [CLI reference](docs/reference/cli.md) · [Python API](docs/reference/python-api.md) · [For leaders](docs/for-leaders.md) · [Security and privacy](docs/security-and-privacy.md) · [FAQ](docs/faq.md)
 
-### Overhead
+Hosted: https://OWNER.github.io/ormas-monitor/
 
-Median epoch time with the default `check_every=50`:
-- **Plain training:** 12.12 s.
-- **Monitored:** 12.55 s, which is **+3.6%** (`examples/overhead.py`, Apple M-series GPU).
+## Citation
 
-The checks run only on sampled steps, so `check_every` trades detail for speed.
+If you use the dead-channel certificate, please cite the paper ([`CITATION.cff`](CITATION.cff)):
 
-### Published models carry dead channels
+```bibtex
+@inproceedings{raadh2026selfrepair,
+  author    = {Raadh, Rokib Al Dhin},
+  title     = {Self-Repair as a Bounded Disturbance: Input-to-State Stability of Neural Network Training Dynamics},
+  booktitle = {DeepMath 2026},
+  address   = {The Ohio State University, Columbus, OH},
+  year      = {2026},
+  note      = {Poster}
+}
+```
 
-We ran `ormas-monitor check` on 22 ImageNet models from torchvision, using each model's real wiring so that skip connections are handled. 19 of the 21 that use BatchNorm → ReLU contain channels **decayed to ~0**:
-- their filter or BatchNorm scale is under 10⁻⁵ of the layer's typical size;
-- their shift is ≤ 0.
+## Contact
 
-EfficientNet-B0 has no ReLU, so it's out of scope.
+Built by Rokib Al Dhin Raadh at [Oxiedo](https://oxiedo.com). Questions, bugs, or a run you'd like a second pair of eyes on: raadh@oxiedo.com. Security issues: see [SECURITY.md](SECURITY.md).
 
-Run on 64 real photos (CIFAR-10 test images upscaled to 224 px), these channels output **exactly 0** in ResNet-18, VGG-19-BN and MnasNet, and at most 1.5 × 10⁻⁶ in DenseNet-169. Other channels in the same layers peak at about 0.3–1.5. It's capacity the model carries and never uses.
-
-| Model | Channels after BN→ReLU | Decayed to ~0 |
-|---|---:|---:|
-| resnet18 | 1,984 | 7 |
-| resnet50 | 7,616 | 1 |
-| resnet152 | 24,000 | 8 |
-| vgg16_bn | 4,224 | 19 |
-| vgg19_bn | 5,504 | 292 (5.3%) |
-| mobilenet_v2 | 15,552 | 18 |
-| mnasnet1_0 | 17,232 | 734 (4.3%) |
-| densenet121 | 40,800 | 2,242 (5.5%) |
-| densenet169 | 77,536 | 7,667 (9.9%) |
-
-The full table for all 22 models is in `scan_results/scan.md`; reproduce with `python examples/scan_public_models.py`.
-
-None of these channels is *exactly* zero, so none is "certified". The weights are only near zero, which is what a dead channel looks like after weight decay has spent the rest of training shrinking it.
-
-Shrinking BatchNorm scales toward zero is also a known pruning technique, so the point isn't that such channels exist. The point is that one command finds them.
-
-## What it does not do
-
-- **Dead-channel proofs cover Conv/Linear → BatchNorm → ReLU networks** (ResNets, VGG, MobileNet and similar). On transformers you get the layer alarms, loss checks and the record, but no dead-unit proof.
-- **It never reads your data,** so it can't tell you which examples or labels are wrong.
-- **The record is evidence, not a certificate of compliance.** It documents what happened during training, for your own technical documentation.
-
-## About
-
-Built by Rokib Al Dhin Raadh at [Oxiedo](https://oxiedo.com). Questions, bugs, or a run you'd like a second pair of eyes on: raadh@oxiedo.com. Licensed under Apache-2.0.
+Licensed under [Apache-2.0](LICENSE).

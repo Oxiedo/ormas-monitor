@@ -1,10 +1,22 @@
+# environments and caches
 .venv/
 __pycache__/
 *.egg-info/
+.pytest_cache/
+.ruff_cache/
+.DS_Store
+
+# build and docs output
+build/
+dist/
+site/
+
+# data and run output
 data/
 demo_runs/
 ormas_demo/
 ormas_run/
 *.health.html
-.pytest_cache/
-build/
+
+# signing keys: never commit a private key (force-add a public key if you want it in the repo)
+*.pem

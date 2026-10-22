@@ -1,0 +1,40 @@
+cff-version: 1.2.0
+message: "If you use ormas-monitor or its dead-channel certificate, please cite the paper below."
+title: "ormas-monitor"
+abstract: >-
+  A PyTorch training-health library and CLI: per-layer alarms against each layer's own
+  baseline, a certificate for dead Conv/Linear-BatchNorm-ReLU channels, optional repair,
+  a weights-only checkpoint check, and a hash-chained, signable training record.
+type: software
+authors:
+  - family-names: "Raadh"
+    given-names: "Rokib Al Dhin"
+    email: "raadh@oxiedo.com"
+    affiliation: "Oxiedo"
+    orcid: "https://orcid.org/0009-0003-1178-5296"
+license: Apache-2.0
+version: "0.2.0"   # keep in step with ormas_monitor.__version__
+repository-code: "https://github.com/OWNER/ormas-monitor"
+url: "https://oxiedo.com"
+keywords:
+  - pytorch
+  - training monitoring
+  - dead neurons
+  - batch normalization
+  - input-to-state stability
+preferred-citation:
+  type: conference-paper
+  title: "Self-Repair as a Bounded Disturbance: Input-to-State Stability of Neural Network Training Dynamics"
+  authors:
+    - family-names: "Raadh"
+      given-names: "Rokib Al Dhin"
+      affiliation: "Oxiedo"
+      orcid: "https://orcid.org/0009-0003-1178-5296"
+  collection-title: "DeepMath 2026"
+  conference:
+    name: "DeepMath 2026"
+    location: "The Ohio State University"
+    date-start: "2026-10-29"
+    date-end: "2026-10-30"
+  year: 2026
+  notes: "Poster."

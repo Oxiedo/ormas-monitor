@@ -1,0 +1,38 @@
+name: Bug report
+description: Something crashes, or behaves differently from the docs.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: The smallest code or command that shows the problem.
+      render: python
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output or traceback
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: ormas-monitor version
+      description: Output of `ormas-monitor --version`.
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      description: Python, PyTorch, OS, device (CPU / CUDA GPU / Apple MPS), and Lightning or transformers version if used.
+    validations:
+      required: true

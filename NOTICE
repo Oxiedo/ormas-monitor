@@ -1,0 +1,12 @@
+ormas-monitor
+Copyright 2026 Oxiedo (Rokib Al Dhin Raadh)
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This product includes software developed at Oxiedo (https://oxiedo.com).
+
+The dead-channel certificate implements Theorem 2 of:
+  R. A. D. Raadh, "Self-Repair as a Bounded Disturbance: Input-to-State Stability of
+  Neural Network Training Dynamics", DeepMath 2026, The Ohio State University.
+
+"ormas-monitor" is not the ORMAS training architecture and contains none of it.

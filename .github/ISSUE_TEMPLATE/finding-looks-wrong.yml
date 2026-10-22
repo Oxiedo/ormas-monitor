@@ -1,0 +1,62 @@
+name: A finding looks wrong
+description: The monitor or `check` reported something you believe is incorrect (a false certificate, a missed dead channel, a spurious alarm).
+labels: [finding]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you. A wrong **certificate** is treated as the most serious kind of bug, because it is presented as a proof.
+        Please do not attach weights or data you are not allowed to share; the finding's JSON and the model's structure are usually enough.
+  - type: dropdown
+    id: source
+    attributes:
+      label: Where did the finding come from?
+      options:
+        - Live monitor (an event in diary.jsonl)
+        - ormas-monitor check
+        - ormas-monitor diff
+        - A report (HTML or Markdown)
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Which kind?
+      options:
+        - certificate / dead_channels (claimed proven dead)
+        - decayed_channels / constant / flat
+        - silent / dormant (estimates)
+        - layer alarm (no_gradient / vanishing / exploding)
+        - loss spike or non-finite
+        - repair
+        - other
+    validations:
+      required: true
+  - type: textarea
+    id: finding
+    attributes:
+      label: The finding
+      description: The event line from diary.jsonl, or the finding from `ormas-monitor check FILE --json`.
+      render: json
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why you believe it is wrong
+      description: For example, the channel recovered later, or it produces nonzero output on real inputs.
+    validations:
+      required: true
+  - type: textarea
+    id: model
+    attributes:
+      label: Model structure
+      description: How the layer is wired (e.g. `print(model)` for the relevant block), the optimizer, and whether BatchNorm was in training mode.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: ormas-monitor version and environment
+      description: "`ormas-monitor --version`, Python, PyTorch, OS, device."
+    validations:
+      required: true

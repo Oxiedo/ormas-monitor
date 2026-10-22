@@ -20,9 +20,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 import torch
+from torch import nn
 
 CONV_KINDS = ("Conv1d", "Conv2d", "Conv3d", "Linear")
 BN_KINDS = ("BatchNorm1d", "BatchNorm2d", "BatchNorm3d", "SyncBatchNorm")
+RELU_KINDS = (nn.ReLU, nn.ReLU6)
+DECAYED_REL_TOL = 1e-5      # "decayed": filter or BatchNorm scale below this x the layer median
 
 
 @dataclass
@@ -50,7 +53,7 @@ def _tiny(values: torch.Tensor, rel_tol: float) -> torch.Tensor:
 
 def scan_channels(weight: torch.Tensor | None, bias: torch.Tensor | None,
                   gamma: torch.Tensor | None, beta: torch.Tensor | None,
-                  rel_tol: float = 1e-5) -> ChannelScan:
+                  rel_tol: float = DECAYED_REL_TOL) -> ChannelScan:
     """Find certified-dead, flat and decayed channels from weights alone.
 
     `weight`/`bias` belong to the producer (Conv or Linear); `gamma`/`beta` to the BatchNorm
@@ -112,7 +115,6 @@ def relu_followers(model: torch.nn.Module, example: torch.Tensor) -> set[str]:
     Runs one forward pass. A skip connection added in place before the ReLU bumps the
     tensor's version counter, so such layers are (correctly) left out.
     """
-    from torch import nn
     kinds = BN_KINDS + CONV_KINDS
     last, found, handles = [None], set(), []
 
@@ -129,7 +131,7 @@ def relu_followers(model: torch.nn.Module, example: torch.Tensor) -> set[str]:
     for name, m in model.named_modules():
         if type(m).__name__ in kinds:
             handles.append(m.register_forward_hook(after(name)))
-        elif isinstance(m, (nn.ReLU, nn.ReLU6)):
+        elif isinstance(m, RELU_KINDS):
             handles.append(m.register_forward_pre_hook(before))
     was = model.training
     model.eval()

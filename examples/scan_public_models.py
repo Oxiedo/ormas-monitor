@@ -3,7 +3,12 @@
 For each model it builds the real network once to find which BatchNorms feed a ReLU directly
 (so skip connections are handled correctly), then checks the published weights.
 
-Run:  python examples/scan_public_models.py [--out scan_results]   (downloads ~1.5 GB of weights)
+With --verify-files it also runs the file-based check (`ormas_monitor.checkpoint.run`, the code
+behind `ormas-monitor check FILE --arch torchvision:<name>`) on the cached .pth file and stops if
+its counts differ from the in-memory check.
+
+Run:  python examples/scan_public_models.py [--out scan_results] [--models resnet18 ...] [--verify-files]
+      (downloads ~1.5 GB of weights on the first run; cached afterwards)
 """
 from __future__ import annotations
 
@@ -14,7 +19,7 @@ from pathlib import Path
 import torch
 import torchvision
 
-from ormas_monitor.checkpoint import check
+from ormas_monitor.checkpoint import check, run
 from ormas_monitor.structure import relu_followers
 
 MODELS = ["resnet18", "resnet34", "resnet50", "resnet101", "resnet152", "resnext50_32x4d",
@@ -24,10 +29,24 @@ MODELS = ["resnet18", "resnet34", "resnet50", "resnet101", "resnet152", "resnext
           "regnet_y_1_6gf", "efficientnet_b0"]
 
 
-def main():
+def verify_file(name: str, row: dict) -> None:
+    """Check the cached weights file for `name` and assert it matches the in-memory counts."""
+    url = torchvision.models.get_model_weights(name).DEFAULT.url
+    path = Path(torch.hub.get_dir()) / "checkpoints" / url.rsplit("/", 1)[-1]
+    res = run(path, arch=f"torchvision:{name}")
+    layers = [l for l in res["layers"] if l["feeds_relu"]]
+    got = (len(layers), sum(len(l["decayed"]) for l in layers), sum(len(l["dormant"]) for l in layers))
+    want = (row["bn_feeding_relu"], row["decayed"], row["dormant"])
+    assert got == want, f"{name}: file check {got} != in-memory check {want}"
+    print(f"{'':20s} file check agrees: {path.name}", flush=True)
+
+
+def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="scan_results")
     ap.add_argument("--models", nargs="*", default=MODELS)
+    ap.add_argument("--verify-files", action="store_true",
+                    help="also check each cached weights file and compare the counts")
     a = ap.parse_args()
     out = Path(a.out)
     out.mkdir(exist_ok=True)
@@ -49,6 +68,8 @@ def main():
         print(f"{name:20s} {row['bn_feeding_relu']:4d} BN->ReLU layers  {row['channels']:7,d} channels  "
               f"certified dead {row['certified']:4d}  constant {row['constant']:4d}  decayed {row['decayed']:4d}  "
               f"dormant {row['dormant']:5d} ({100 * row['dormant'] / max(row['channels'], 1):.2f}%)", flush=True)
+        if a.verify_files:
+            verify_file(name, row)
     (out / "scan.json").write_text(json.dumps({"torchvision": torchvision.__version__, "rows": rows}, indent=1))
     lines = ["| Model | BN→ReLU layers | Channels | Certified dead | Constant | Decayed to ~0 | Dormant (est.) |",
              "|---|---:|---:|---:|---:|---:|---:|"]

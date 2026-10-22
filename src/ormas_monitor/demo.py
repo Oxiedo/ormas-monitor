@@ -23,25 +23,30 @@ from .monitor import Monitor
 
 
 class StandardCNN(nn.Module):
+    """The paper's CIFAR-10 baseline: three Conv-BN-ReLU-MaxPool blocks and a two-layer MLP head."""
+
     def __init__(self, num_classes: int = 10) -> None:
         super().__init__()
 
-        def block(i, o):
+        def block(i: int, o: int) -> nn.Sequential:
             return nn.Sequential(nn.Conv2d(i, o, 3, padding=1), nn.BatchNorm2d(o), nn.ReLU(), nn.MaxPool2d(2))
         self.conv1, self.conv2, self.conv3 = block(3, 32), block(32, 64), block(64, 128)
         self.classifier = nn.Sequential(nn.Linear(128 * 4 * 4, 256), nn.ReLU(), nn.Dropout(0.3),
                                         nn.Linear(256, num_classes))
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.classifier(self.conv3(self.conv2(self.conv1(x))).flatten(1))
 
 
 def device() -> torch.device:
+    """CUDA if present, else Apple MPS, else CPU."""
     return torch.device("cuda" if torch.cuda.is_available() else
                         "mps" if torch.backends.mps.is_available() else "cpu")
 
 
-def load_cifar(root: str | Path, dev: torch.device, train_size: int | None = None):
+def load_cifar(root: str | Path, dev: torch.device,
+               train_size: int | None = None) -> list[torch.Tensor]:
+    """[x_train, y_train, x_test, y_test] on `dev`, normalised; downloads CIFAR-10 to `root` once."""
     try:
         from torchvision.datasets import CIFAR10
     except ImportError as e:
@@ -59,7 +64,9 @@ def load_cifar(root: str | Path, dev: torch.device, train_size: int | None = Non
     return out
 
 
-def epoch(model, opt, x, y, gen, mon=None, bs=128):
+def epoch(model: nn.Module, opt: torch.optim.Optimizer, x: torch.Tensor, y: torch.Tensor,
+          gen: torch.Generator, mon: Monitor | None = None, bs: int = 128) -> None:
+    """One shuffled training epoch; `mon.step(loss)` after every backward when a monitor is given."""
     model.train()
     perm = torch.randperm(len(x), generator=gen).to(x.device)
     for i in range(0, len(x), bs):
@@ -73,7 +80,8 @@ def epoch(model, opt, x, y, gen, mon=None, bs=128):
 
 
 @torch.no_grad()
-def accuracy(model, x, y) -> float:
+def accuracy(model: nn.Module, x: torch.Tensor, y: torch.Tensor) -> float:
+    """Test accuracy in percent (eval mode, batches of 1,000)."""
     model.eval()
     hits = sum((model(x[i:i + 1000]).argmax(1) == y[i:i + 1000]).sum().item() for i in range(0, len(x), 1000))
     return 100 * hits / len(x)
@@ -81,6 +89,12 @@ def accuracy(model, x, y) -> float:
 
 def run(out: str | Path = "ormas_demo", data: str | Path = "data", before: int = 4, after: int = 4,
         train_size: int | None = 10_000, seed: int = 0) -> dict:
+    """Train, lesion conv2 and conv3, then train on watch-only and with repair from the same state.
+
+    Returns {"healthy": accuracy, "watch": {...}, "repair": {...}}, each arm with its accuracy
+    curve, report path and the monitor's counts. Defaults are the quick demo (10,000 images,
+    4 epochs before and 4 after); `ormas-monitor demo --full` uses all images, 8 and 12.
+    """
     dev = device()
     xtr, ytr, xte, yte = load_cifar(data, dev, train_size)
     print(f"device {dev}; {len(xtr):,} training images, {len(xte):,} test images")

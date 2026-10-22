@@ -12,7 +12,7 @@ import sys
 
 from . import __version__
 
-COMMANDS = ("check", "verify", "report", "demo")
+COMMANDS = ("check", "verify", "report", "demo", "keygen", "sign", "diff")
 
 
 def build_parser() -> argparse.ArgumentParser:

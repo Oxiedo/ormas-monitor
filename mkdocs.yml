@@ -1,0 +1,83 @@
+site_name: ormas-monitor
+site_description: Catch the layer that breaks while your PyTorch model trains, and get proof.
+site_author: Rokib Al Dhin Raadh (Oxiedo)
+site_url: https://OWNER.github.io/ormas-monitor/
+repo_url: https://github.com/OWNER/ormas-monitor
+repo_name: ormas-monitor
+edit_uri: edit/main/docs/
+copyright: Copyright 2026 Oxiedo · Apache-2.0
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - content.code.copy
+    - search.suggest
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: blue grey
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: blue grey
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Light mode
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.snippets:
+      check_paths: true
+
+nav:
+  - Home: index.md
+  - Quickstart: quickstart.md
+  - Concepts:
+      - Dead channels and the certificate: concepts/dead-channels.md
+      - Alarms against each layer's own baseline: concepts/alarms.md
+      - Repair: concepts/repair.md
+      - The training record: concepts/record.md
+  - Guides:
+      - Plain PyTorch: guides/pytorch.md
+      - Lightning: guides/lightning.md
+      - Hugging Face Trainer: guides/huggingface.md
+      - Mixed precision: guides/mixed-precision.md
+      - Distributed training: guides/distributed.md
+      - Large models and layers=: guides/large-models.md
+      - check as a CI gate: guides/ci-gate.md
+      - Sending events elsewhere: guides/sinks.md
+  - Reference:
+      - CLI: reference/cli.md
+      - Python API: reference/python-api.md
+      - MonitorConfig: reference/config.md
+      - Record format: reference/record-format.md
+      - check findings: reference/check-findings.md
+  - For leaders: for-leaders.md
+  - Results: results.md
+  - Limitations: limitations.md
+  - Security and privacy: security-and-privacy.md
+  - FAQ: faq.md
+  - About: about.md
+  - Changelog: changelog.md
