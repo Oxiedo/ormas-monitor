@@ -29,7 +29,7 @@ LAYOUT = RecordLayout()
 @dataclass(frozen=True)
 class Location:
     """A resolved record. `run_dir` is None when the user gave a lone diary file (for example
-    `sample_reports/cifar10_with_repair.diary.jsonl`): then there are no metrics, seal or signature
+    `tests/fixtures/v0_1_cifar10_with_repair.diary.jsonl`): then there are no metrics, seal or signature
     to look for, and verification says so instead of failing."""
 
     diary: Path

@@ -18,7 +18,7 @@ from ormas_monitor.diary import GENESIS, Diary, file_sha256, read, verify
 from ormas_monitor.record import RecordError, seal, verify_run
 from ormas_monitor.record.chain import body_of, digest
 
-SAMPLE = Path(__file__).resolve().parents[1] / "sample_reports" / "cifar10_with_repair.diary.jsonl"
+SAMPLE = Path(__file__).resolve().parent / "fixtures" / "v0_1_cifar10_with_repair.diary.jsonl"
 
 
 def small_cnn():

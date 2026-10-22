@@ -1,0 +1,87 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><meta name='generator' content='ormas-monitor 0.1.0'><title>Run comparison: CIFAR-10 dead-layer demo (watch) vs CIFAR-10 dead-layer demo (repair)</title><style>
+:root{--bg:#fff;--fg:#1d2433;--mute:#566070;--line:#d5dae0;--card:#f4f6f8;--teal:#0f766e;
+--tealbg:#e3f1ef;--red:#b4152b;--redbg:#fbeaec;--amber:#8f5200;--amberbg:#fdf1dc;--blue:#245f9e;
+--bluebg:#e6eef9;--hatch:#b4152b}
+@media (prefers-color-scheme:dark){:root{--bg:#12161d;--fg:#e6e9ee;--mute:#a1a9b4;--line:#2c333d;
+--card:#1a2029;--teal:#4fb8ad;--tealbg:#13302c;--red:#ff7a8a;--redbg:#3a1a20;--amber:#f0b45a;
+--amberbg:#352712;--blue:#86b6ee;--bluebg:#16253a;--hatch:#ff7a8a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);
+font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+main{max-width:1040px;margin:0 auto;padding:32px 20px 48px}
+main.narrow{max-width:780px}
+h1{font-size:28px;line-height:1.2;margin:0 0 6px}
+h2{font-size:19px;margin:34px 0 12px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+h3{font-size:15px;margin:22px 0 8px}
+p{margin:8px 0}
+.eyebrow{text-transform:uppercase;letter-spacing:.06em;font-size:12px;color:var(--mute);margin:0 0 6px;font-weight:600}
+.sub{color:var(--mute);margin:0}.small{font-size:13px}
+.mono,code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px}
+code{background:var(--card);padding:1px 5px;border-radius:4px}
+.verdict{margin:22px 0;padding:16px 18px;border-radius:10px;border:1px solid;border-left-width:6px}
+.verdict .status{display:block;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-bottom:4px}
+.verdict b.head{font-size:18px;line-height:1.35;display:block}
+.verdict p{margin:8px 0 0}
+.ok{background:var(--tealbg);border-color:var(--teal)}.ok .status{color:var(--teal)}
+.bad{background:var(--redbg);border-color:var(--red)}.bad .status{color:var(--red)}
+.warn{background:var(--amberbg);border-color:var(--amber)}.warn .status{color:var(--amber)}
+.fixed{background:var(--bluebg);border-color:var(--blue)}.fixed .status{color:var(--blue)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0}
+.tile{background:var(--card);border-radius:10px;padding:12px 14px;break-inside:avoid}
+.tile .n{font-size:22px;font-weight:700;line-height:1.25;font-variant-numeric:tabular-nums}
+.tile .l{color:var(--mute);font-size:13px}
+table{border-collapse:collapse;width:100%;font-size:14px}
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--mute);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.03em}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+tr{break-inside:avoid}
+.tag{display:inline-block;padding:1px 8px;border-radius:99px;font-size:12px;font-weight:600;white-space:nowrap;
+border:1px solid transparent}
+.critical{background:var(--redbg);color:var(--red);border-color:var(--red)}
+.warning{background:var(--amberbg);color:var(--amber)}
+.action{background:var(--bluebg);color:var(--blue)}
+.proof{background:var(--redbg);color:var(--red)}
+.info{background:var(--card);color:var(--mute)}
+.healthy{background:var(--tealbg);color:var(--teal)}
+.finding{border-left:4px solid var(--line);padding:8px 14px;margin:10px 0;background:var(--card);
+border-radius:0 8px 8px 0;break-inside:avoid}
+.finding.f-critical{border-color:var(--red)}.finding.f-warning{border-color:var(--amber)}
+.finding p{margin:4px 0 0;color:var(--mute)}
+.box{border:1px solid var(--line);border-radius:10px;padding:12px 18px;margin:14px 0;break-inside:avoid}
+.box h2,.box h3{margin-top:4px;border:0;padding:0}
+.box ul{margin:6px 0;padding-left:20px}.box li{margin:4px 0}
+.estimate{border:1px dashed var(--amber);border-radius:8px;padding:10px 14px;margin:12px 0}
+.label{font-size:11px;font-weight:700;letter-spacing:.06em;border:1px solid currentColor;border-radius:4px;
+padding:0 5px;color:var(--amber)}
+dl.gloss{display:grid;grid-template-columns:minmax(120px,max-content) 1fr;gap:6px 16px;margin:8px 0}
+dl.gloss dt{font-weight:600}dl.gloss dd{margin:0;color:var(--mute)}
+svg{display:block;max-width:100%;height:auto}
+svg text{fill:var(--mute);font-size:11px;font-family:inherit}
+.legend{display:flex;flex-wrap:wrap;gap:4px 16px;color:var(--mute);font-size:13px;margin:6px 0 10px}
+.legend span{white-space:nowrap}
+.sym{font-weight:700}
+.s-proof{color:var(--red)}.s-action{color:var(--blue)}.s-warning{color:var(--amber)}.s-critical{color:var(--red)}
+.s-info{color:var(--mute)}
+.sw{display:inline-block;width:14px;height:10px;vertical-align:-1px;border:1px solid var(--hatch);
+background:repeating-linear-gradient(45deg,var(--hatch) 0 2px,transparent 2px 5px);opacity:.75}
+details{margin-top:8px}summary{cursor:pointer;color:var(--mute)}
+footer{margin-top:44px;padding-top:16px;border-top:1px solid var(--line);color:var(--mute);font-size:13px}
+a{color:var(--teal)}
+@media (max-width:480px){main{padding:20px 16px 36px}h1{font-size:23px}h2{font-size:17px}
+.verdict b.head{font-size:16px}.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.tile .n{font-size:19px}
+dl.gloss{grid-template-columns:1fr}dl.gloss dd{margin-bottom:6px}th,td{padding:6px 5px}svg text{font-size:20px}}
+@media print{
+:root{--bg:#fff;--fg:#111;--mute:#444;--line:#bbb;--card:#f3f4f6;--teal:#0b5e57;--tealbg:#e3f1ef;
+--red:#a3122a;--redbg:#fbeaec;--amber:#7a4600;--amberbg:#fdf1dc;--blue:#1d4f86;--bluebg:#e6eef9;--hatch:#a3122a}
+html,body{background:#fff;color:#111}
+*{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{font-size:11pt}main,main.narrow{max-width:none;padding:0}
+h1{font-size:20pt}h2{font-size:13pt;margin-top:18pt;break-after:avoid}h3{break-after:avoid}
+.scroll{overflow:visible}table{font-size:9pt}
+.verdict,.box,.tile,.finding,.estimate,svg,figure{break-inside:avoid}
+a{color:inherit;text-decoration:none}
+details>summary{display:none}
+.noprint{display:none}
+@page{margin:16mm 14mm}}
+</style></head><body><main><p class='eyebrow'>Run comparison · A (approved) vs B (proposed)</p><h1>CIFAR-10 dead-layer demo (watch) vs CIFAR-10 dead-layer demo (repair)</h1><div class='verdict ok' role='status'><span class='status'>Run B healthier</span><b class='head'>Same architecture. 1 setting changed: config.repair False -&gt; True. Run B is healthier than run A in 4 layers: conv2.0, conv3.0, classifier.0, classifier.3. Repairs: 0 in run A, 2 in run B.</b></div><div class='tiles'><div class='tile' style='padding:10px 14px'><div class='l'><b>Run A</b></div><div class='small'>Name: CIFAR-10 dead-layer demo (watch)</div><div class='small'>Model: StandardCNN</div><div class='small'>Parameters: 620,810</div><div class='small'>Steps: 5,083</div><div class='small'>Final loss: 2.3</div><div class='small'>Record: <span class='tag healthy'>checks pass</span></div><div class='small'>Finished: <span class='tag healthy'>yes</span></div><div class='small'>Sealed / signed: <span class='tag info'>not sealed</span> <span class='tag info'>not signed</span></div><div class='small'>Path: <span class='mono'>demo_runs/watch</span></div></div><div class='tile' style='padding:10px 14px'><div class='l'><b>Run B</b></div><div class='small'>Name: CIFAR-10 dead-layer demo (repair)</div><div class='small'>Model: StandardCNN</div><div class='small'>Parameters: 620,810</div><div class='small'>Steps: 5,083</div><div class='small'>Final loss: 0.461</div><div class='small'>Record: <span class='tag healthy'>checks pass</span></div><div class='small'>Finished: <span class='tag healthy'>yes</span></div><div class='small'>Sealed / signed: <span class='tag healthy'>sealed</span> <span class='tag healthy'>signed</span></div><div class='small'>Path: <span class='mono'>demo_runs/repair</span></div></div></div><h2>Settings that differ</h2><div class='scroll'><table><thead><tr><th>Setting</th><th>Run A</th><th>Run B</th></tr></thead><tbody><tr><td><span class='mono'>config.repair</span></td><td>no</td><td>yes</td></tr></tbody></table></div><h2>Layers</h2><p>4 of 8 layers differ between the runs (listed first). Cells read A → B; – means not scanned or not recorded, which is not 0.</p><div class='scroll'><table><thead><tr><th>Layer</th><th>Change</th><th class='num'>Alarms</th><th class='num'>Peak stuck</th><th class='num'>Stuck at end</th><th class='num'>Proven dead</th><th class='num'>Repairs</th><th class='num'>Channels repaired</th><th>Alarm kinds</th></tr></thead><tbody><tr><td><span class='mono'>conv2.0</span></td><td><span class='tag healthy'>better in B</span></td><td class='num'>1</td><td class='num'>64</td><td class='num'><b>64 → 0</b></td><td class='num'>64</td><td class='num'><b>0 → 1</b></td><td class='num'><b>0 → 64</b></td><td>no_gradient</td></tr><tr><td><span class='mono'>conv3.0</span></td><td><span class='tag healthy'>better in B</span></td><td class='num'>1</td><td class='num'>128</td><td class='num'><b>128 → 0</b></td><td class='num'>128</td><td class='num'><b>0 → 1</b></td><td class='num'><b>0 → 128</b></td><td>no_gradient</td></tr><tr><td><span class='mono'>classifier.0</span></td><td><span class='tag healthy'>better in B</span></td><td class='num'>1</td><td class='num'><b>248 → 210</b></td><td class='num'><b>248 → 204</b></td><td class='num'>0</td><td class='num'>0</td><td class='num'>0</td><td>vanishing</td></tr><tr><td><span class='mono'>classifier.3</span></td><td><span class='tag healthy'>better in B</span></td><td class='num'><b>2 → 1</b></td><td class='num'>0</td><td class='num'>0</td><td class='num'>0</td><td class='num'>0</td><td class='num'>0</td><td>vanishing</td></tr><tr><td><span class='mono'>conv1.0</span></td><td><span class='tag info'>same</span></td><td class='num'>1</td><td class='num'>0</td><td class='num'>0</td><td class='num'>0</td><td class='num'>0</td><td class='num'>0</td><td>no_gradient</td></tr><tr><td><span class='mono'>conv1.1</span></td><td><span class='tag info'>same</span></td><td class='num'>1</td><td class='num'>–</td><td class='num'>–</td><td class='num'>–</td><td class='num'>0</td><td class='num'>0</td><td>no_gradient</td></tr><tr><td><span class='mono'>conv2.1</span></td><td><span class='tag info'>same</span></td><td class='num'>1</td><td class='num'>–</td><td class='num'>–</td><td class='num'>–</td><td class='num'>0</td><td class='num'>0</td><td>no_gradient</td></tr><tr><td><span class='mono'>conv3.1</span></td><td><span class='tag info'>same</span></td><td class='num'>1</td><td class='num'>–</td><td class='num'>–</td><td class='num'>–</td><td class='num'>0</td><td class='num'>0</td><td>no_gradient</td></tr></tbody></table></div><h2>Events</h2><div class='scroll'><table><thead><tr><th>Event</th><th class='num'>Run A → Run B</th></tr></thead><tbody><tr><td>run start</td><td class='num'>1</td></tr><tr><td>structure</td><td class='num'>1</td></tr><tr><td>manifest</td><td class='num'>1</td></tr><tr><td>channels</td><td class='num'>5</td></tr><tr><td>loss spike</td><td class='num'><b>1 → 3</b></td></tr><tr><td>certificate</td><td class='num'>2</td></tr><tr><td>alarm</td><td class='num'><b>9 → 8</b></td></tr><tr><td>alarm cleared</td><td class='num'><b>3 → 8</b></td></tr><tr><td>run end</td><td class='num'>1</td></tr><tr><td>repair</td><td class='num'><b>0 → 2</b></td></tr><tr><td>channels cleared</td><td class='num'><b>0 → 2</b></td></tr><tr><td>loss recovered</td><td class='num'><b>0 → 3</b></td></tr></tbody></table></div><p class='sub small'>A comparison of two records, not of two models' quality: it shows what each monitor saw and did, not which model is better.</p><footer>Generated on this machine by <b>ormas-monitor 0.1.0</b> from the run's own record. Nothing was uploaded anywhere. Dead-channel proofs follow Theorem 2 of R. A. D. Raadh, <i>Self-Repair as a Bounded Disturbance</i> (DeepMath 2026). Built by <a href='https://oxiedo.com'>Oxiedo</a>. Questions about this report: <a href='mailto:raadh@oxiedo.com'>raadh@oxiedo.com</a></footer></main></body></html>

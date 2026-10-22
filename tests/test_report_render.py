@@ -16,7 +16,7 @@ from ormas_monitor import Monitor
 from ormas_monitor.diary import Diary
 from ormas_monitor.report import analyse, write_all, write_check_report, write_diff_report
 
-SAMPLE = Path(__file__).resolve().parents[1] / "sample_reports" / "cifar10_with_repair.diary.jsonl"
+SAMPLE = Path(__file__).resolve().parent / "fixtures" / "v0_1_cifar10_with_repair.diary.jsonl"
 
 
 @pytest.mark.skipif(not SAMPLE.exists(), reason="sample record not in this checkout")

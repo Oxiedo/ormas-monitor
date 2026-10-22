@@ -1,0 +1,87 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><meta name='generator' content='ormas-monitor 0.1.0'><title>Run summary: CIFAR-10 dead-layer demo (repair)</title><style>
+:root{--bg:#fff;--fg:#1d2433;--mute:#566070;--line:#d5dae0;--card:#f4f6f8;--teal:#0f766e;
+--tealbg:#e3f1ef;--red:#b4152b;--redbg:#fbeaec;--amber:#8f5200;--amberbg:#fdf1dc;--blue:#245f9e;
+--bluebg:#e6eef9;--hatch:#b4152b}
+@media (prefers-color-scheme:dark){:root{--bg:#12161d;--fg:#e6e9ee;--mute:#a1a9b4;--line:#2c333d;
+--card:#1a2029;--teal:#4fb8ad;--tealbg:#13302c;--red:#ff7a8a;--redbg:#3a1a20;--amber:#f0b45a;
+--amberbg:#352712;--blue:#86b6ee;--bluebg:#16253a;--hatch:#ff7a8a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);
+font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+main{max-width:1040px;margin:0 auto;padding:32px 20px 48px}
+main.narrow{max-width:780px}
+h1{font-size:28px;line-height:1.2;margin:0 0 6px}
+h2{font-size:19px;margin:34px 0 12px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+h3{font-size:15px;margin:22px 0 8px}
+p{margin:8px 0}
+.eyebrow{text-transform:uppercase;letter-spacing:.06em;font-size:12px;color:var(--mute);margin:0 0 6px;font-weight:600}
+.sub{color:var(--mute);margin:0}.small{font-size:13px}
+.mono,code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px}
+code{background:var(--card);padding:1px 5px;border-radius:4px}
+.verdict{margin:22px 0;padding:16px 18px;border-radius:10px;border:1px solid;border-left-width:6px}
+.verdict .status{display:block;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-bottom:4px}
+.verdict b.head{font-size:18px;line-height:1.35;display:block}
+.verdict p{margin:8px 0 0}
+.ok{background:var(--tealbg);border-color:var(--teal)}.ok .status{color:var(--teal)}
+.bad{background:var(--redbg);border-color:var(--red)}.bad .status{color:var(--red)}
+.warn{background:var(--amberbg);border-color:var(--amber)}.warn .status{color:var(--amber)}
+.fixed{background:var(--bluebg);border-color:var(--blue)}.fixed .status{color:var(--blue)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0}
+.tile{background:var(--card);border-radius:10px;padding:12px 14px;break-inside:avoid}
+.tile .n{font-size:22px;font-weight:700;line-height:1.25;font-variant-numeric:tabular-nums}
+.tile .l{color:var(--mute);font-size:13px}
+table{border-collapse:collapse;width:100%;font-size:14px}
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--mute);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.03em}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+tr{break-inside:avoid}
+.tag{display:inline-block;padding:1px 8px;border-radius:99px;font-size:12px;font-weight:600;white-space:nowrap;
+border:1px solid transparent}
+.critical{background:var(--redbg);color:var(--red);border-color:var(--red)}
+.warning{background:var(--amberbg);color:var(--amber)}
+.action{background:var(--bluebg);color:var(--blue)}
+.proof{background:var(--redbg);color:var(--red)}
+.info{background:var(--card);color:var(--mute)}
+.healthy{background:var(--tealbg);color:var(--teal)}
+.finding{border-left:4px solid var(--line);padding:8px 14px;margin:10px 0;background:var(--card);
+border-radius:0 8px 8px 0;break-inside:avoid}
+.finding.f-critical{border-color:var(--red)}.finding.f-warning{border-color:var(--amber)}
+.finding p{margin:4px 0 0;color:var(--mute)}
+.box{border:1px solid var(--line);border-radius:10px;padding:12px 18px;margin:14px 0;break-inside:avoid}
+.box h2,.box h3{margin-top:4px;border:0;padding:0}
+.box ul{margin:6px 0;padding-left:20px}.box li{margin:4px 0}
+.estimate{border:1px dashed var(--amber);border-radius:8px;padding:10px 14px;margin:12px 0}
+.label{font-size:11px;font-weight:700;letter-spacing:.06em;border:1px solid currentColor;border-radius:4px;
+padding:0 5px;color:var(--amber)}
+dl.gloss{display:grid;grid-template-columns:minmax(120px,max-content) 1fr;gap:6px 16px;margin:8px 0}
+dl.gloss dt{font-weight:600}dl.gloss dd{margin:0;color:var(--mute)}
+svg{display:block;max-width:100%;height:auto}
+svg text{fill:var(--mute);font-size:11px;font-family:inherit}
+.legend{display:flex;flex-wrap:wrap;gap:4px 16px;color:var(--mute);font-size:13px;margin:6px 0 10px}
+.legend span{white-space:nowrap}
+.sym{font-weight:700}
+.s-proof{color:var(--red)}.s-action{color:var(--blue)}.s-warning{color:var(--amber)}.s-critical{color:var(--red)}
+.s-info{color:var(--mute)}
+.sw{display:inline-block;width:14px;height:10px;vertical-align:-1px;border:1px solid var(--hatch);
+background:repeating-linear-gradient(45deg,var(--hatch) 0 2px,transparent 2px 5px);opacity:.75}
+details{margin-top:8px}summary{cursor:pointer;color:var(--mute)}
+footer{margin-top:44px;padding-top:16px;border-top:1px solid var(--line);color:var(--mute);font-size:13px}
+a{color:var(--teal)}
+@media (max-width:480px){main{padding:20px 16px 36px}h1{font-size:23px}h2{font-size:17px}
+.verdict b.head{font-size:16px}.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.tile .n{font-size:19px}
+dl.gloss{grid-template-columns:1fr}dl.gloss dd{margin-bottom:6px}th,td{padding:6px 5px}svg text{font-size:20px}}
+@media print{
+:root{--bg:#fff;--fg:#111;--mute:#444;--line:#bbb;--card:#f3f4f6;--teal:#0b5e57;--tealbg:#e3f1ef;
+--red:#a3122a;--redbg:#fbeaec;--amber:#7a4600;--amberbg:#fdf1dc;--blue:#1d4f86;--bluebg:#e6eef9;--hatch:#a3122a}
+html,body{background:#fff;color:#111}
+*{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{font-size:11pt}main,main.narrow{max-width:none;padding:0}
+h1{font-size:20pt}h2{font-size:13pt;margin-top:18pt;break-after:avoid}h3{break-after:avoid}
+.scroll{overflow:visible}table{font-size:9pt}
+.verdict,.box,.tile,.finding,.estimate,svg,figure{break-inside:avoid}
+a{color:inherit;text-decoration:none}
+details>summary{display:none}
+.noprint{display:none}
+@page{margin:16mm 14mm}}
+</style></head><body><main class='narrow'><p class='eyebrow'>Training run summary · for decision-makers</p><h1>CIFAR-10 dead-layer demo (repair)</h1><p class='sub'>StandardCNN · 2026-10-23 00:13 · repair on</p><div class='verdict fixed' role='status'><span class='status'>Problem found and repaired</span><b class='head'>Part of the model stopped learning (detected at step 400); the monitor repaired it at step 450, and no part was stuck after that.</b></div><h2>What happened</h2><p>The monitor checked the model every 50 steps over 5,083 training steps (3 min 56 s). At step 400 it found 2 layers (conv2.0 and conv3.0) with stuck channels; 192 channels were proven dead, meaning they could never learn again on their own. By step 450 no layer was stuck any more. The training loss (the error the model is trained to reduce) jumped 3 times, first at step 400. The learning signal of 8 layers fell to zero or moved far outside its own normal range (8 warnings, first at step 450).</p><h2>What it cost</h2><p>50 of 5,083 training steps (under 1%) ran with part of the model stuck.</p><p>3.2 s of wall-clock time (1% of 3 min 56 s).</p><svg viewBox='0 0 700 64' width='100%' role='img' aria-label='Run timeline; hatched where part of the model was stuck'><defs><pattern id='th' width='6' height='6' patternUnits='userSpaceOnUse' patternTransform='rotate(45)'><rect width='6' height='6' fill='var(--hatch)' opacity='.08'/><line x1='0' y1='0' x2='0' y2='6' stroke='var(--hatch)' stroke-width='1.5' opacity='.45'/></pattern></defs><rect x='4' y='20' width='692' height='18' rx='3' fill='var(--card)' stroke='var(--line)'/><rect x='58.5' y='20' width='6.8' height='18' fill='url(#th)' stroke='var(--hatch)' stroke-width='1'><title>steps 400–450</title></rect><text x='58.5' y='15' text-anchor='middle' style='fill:var(--red);font-size:12px'>◆<title>step 400: certificate</title></text><text x='65.3' y='15' text-anchor='middle' style='fill:var(--blue);font-size:12px'>▲<title>step 450: repair</title></text><text x='4' y='54'>step 0</text><text x='696' y='54' text-anchor='end'>step 5,083 (end)</text></svg><div class='legend'><span><span class='sw'></span> a layer had stuck channels</span><span><span class='sym s-proof'>◆</span> proven dead</span><span><span class='sym s-action'>▲</span> repair</span></div><p class='sub small'>Counted from the first check that saw the problem; it may have started up to 50 steps earlier. Time comes from the record&#x27;s own timestamps.</p><h2>What was done</h2><p>The monitor repaired 192 channels in 2 layers (at step 450): it reset them to fresh starting values and cleared the optimizer&#x27;s memory of them, so training could use them again. No limit was enforced on how much a repair could change the layer. No layer was stuck at the end of the run.</p><h2>Can you trust this record?</h2><p>Yes: all 37 entries of the record check out and the record is signed by the key with fingerprint d8798457870b88e1…, verified with that key, so nothing was edited, removed or rewritten after signing (a signature shows who vouched for the record, not that training happened as recorded).</p><div class='box'><h3>What this report does not tell you</h3><ul><li>It does not make anyone compliant with the EU AI Act or any other rule. The record is evidence for technical documentation, not a certificate.</li><li>It does not measure how accurate or fit for purpose the model is. A run with no problems found can still produce a poor model.</li><li>It never reads the training data, so it cannot find mislabelled or harmful examples.</li><li>Proofs that a part of the model is dead apply only to one common building block (convolution or linear layer, then batch normalisation, then ReLU). Transformers and large language models get warnings only, never proofs.</li><li>The tool has so far been tested on one Apple-silicon Mac, not yet on NVIDIA/Linux, multiple GPUs or at large scale.</li></ul></div><h2>Words used here</h2><dl class='gloss'><dt>Layer</dt><dd>One stage of the neural network. Layers have internal names such as conv2.0.</dd><dt>Channel</dt><dd>One small unit inside a layer. A layer has tens to thousands of them.</dd><dt>Stuck</dt><dd>A channel that, judging from its weights, outputs nothing useful: proven dead, a constant, or shrunk to almost zero.</dd><dt>Proven dead</dt><dd>A mathematical certificate that a channel can never learn again on its own, however long training continues.</dd><dt>Warning (alarm)</dt><dd>A layer&#x27;s learning signal moved far outside that layer&#x27;s own normal range.</dd><dt>Repair</dt><dd>Resetting stuck channels to fresh starting values so training can use them again. Only happens if switched on.</dd><dt>Tamper-evident record</dt><dd>The log of everything the monitor saw. Each line carries a fingerprint of the line before it, so edits show.</dd><dt>Signature</dt><dd>A digital seal made with a private key. It shows who vouched for the record and detects a record rewritten from scratch.</dd></dl><p class='sub small'>The technical detail behind every sentence is in <a href='report.html'>report.html</a> (engineer report) and in the record itself, <span class='mono'>diary.jsonl</span>.</p><footer>Generated on this machine by <b>ormas-monitor 0.1.0</b> from the run's own record. Nothing was uploaded anywhere. Dead-channel proofs follow Theorem 2 of R. A. D. Raadh, <i>Self-Repair as a Bounded Disturbance</i> (DeepMath 2026). Built by <a href='https://oxiedo.com'>Oxiedo</a>. Questions about this report: <a href='mailto:raadh@oxiedo.com'>raadh@oxiedo.com</a></footer></main></body></html>

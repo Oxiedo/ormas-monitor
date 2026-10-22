@@ -12,7 +12,7 @@ from ormas_monitor import Monitor
 from ormas_monitor.commands import diff as diff_cmd
 from ormas_monitor.record import diff_runs
 
-SAMPLE = Path(__file__).resolve().parents[1] / "sample_reports" / "cifar10_with_repair.diary.jsonl"
+SAMPLE = Path(__file__).resolve().parent / "fixtures" / "v0_1_cifar10_with_repair.diary.jsonl"
 LAYER_KEYS = {"layer", "in_a", "in_b", "alarms_a", "alarms_b", "peak_stuck_a", "peak_stuck_b",
               "repairs_a", "repairs_b", "certified_a", "certified_b"}
 
