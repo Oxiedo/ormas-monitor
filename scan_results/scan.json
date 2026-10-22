@@ -1,0 +1,247 @@
+{
+ "torchvision": "0.26.0",
+ "rows": [
+  {
+   "model": "resnet18",
+   "parameters": 11699112,
+   "bn_feeding_relu": 9,
+   "channels": 1984,
+   "certified": 0,
+   "constant": 0,
+   "decayed": 7,
+   "dormant": 1,
+   "worst_layer": "bn1"
+  },
+  {
+   "model": "resnet34",
+   "parameters": 21814696,
+   "bn_feeding_relu": 17,
+   "channels": 3840,
+   "certified": 0,
+   "constant": 0,
+   "decayed": 7,
+   "dormant": 2,
+   "worst_layer": "bn1"
+  },
+  {
+   "model": "resnet50",
+   "parameters": 25610152,
+   "bn_feeding_relu": 33,
+   "channels": 7616,
+   "certified": 0,
+   "constant": 0,
+   "decayed": 1,
+   "dormant": 2,
+   "worst_layer": "layer1.0.bn2"
+  },
+  {
+   "model": "resnet101",
+   "parameters": 44654504,
+   "bn_feeding_relu": 67,
+   "channels": 16320,
+   "certified": 0,
+   "constant": 0,
+   "decayed": 1,
+   "dormant": 2,
+   "worst_layer": "layer1.0.bn2"
+  },
+  {
+   "model": "resnet152",
+   "parameters": 60344232,
+   "bn_feeding_relu": 101,
+   "channels": 24000,
+   "certified": 0,
+   "constant": 0,
+   "decayed": 8,
+   "dormant": 3,
+   "worst_layer": "layer1.0.bn2"
+  },
+  {
+   "model": "resnext50_32x4d",
+   "parameters": 25097128,
+   "bn_feeding_relu": 33,
+   "channels": 15168,
+   "certified": 0,
+   "constant": 0,
+   "decayed": 6,
+   "dormant": 5,
+   "worst_layer": "layer1.1.bn1"
+  },
+  {
+   "model": "wide_resnet50_2",
+   "parameters": 68951464,
+   "bn_feeding_relu": 33,
+   "channels": 15168,
+   "certified": 0,
+   "constant": 0,
+   "decayed": 0,
+   "dormant": 6,
+   "worst_layer": "layer1.0.bn2"
+  },
+  {
+   "model": "vgg11_bn",
+   "parameters": 132874344,
+   "bn_feeding_relu": 8,
+   "channels": 2752,
+   "certified": 0,
+   "constant": 0,
+   "decayed": 32,
+   "dormant": 7,
+   "worst_layer": "features.1"
+  },
+  {
+   "model": "vgg13_bn",
+   "parameters": 133059624,
+   "bn_feeding_relu": 10,
+   "channels": 2944,
+   "certified": 0,
+   "constant": 0,
+   "decayed": 91,
+   "dormant": 8,
+   "worst_layer": "features.1"
+  },
+  {
+   "model": "vgg16_bn",
+   "parameters": 138374440,
+   "bn_feeding_relu": 13,
+   "channels": 4224,
+   "certified": 0,
+   "constant": 0,
+   "decayed": 19,
+   "dormant": 49,
+   "worst_layer": "features.1"
+  },
+  {
+   "model": "vgg19_bn",
+   "parameters": 143689256,
+   "bn_feeding_relu": 16,
+   "channels": 5504,
+   "certified": 0,
+   "constant": 0,
+   "decayed": 292,
+   "dormant": 141,
+   "worst_layer": "features.1"
+  },
+  {
+   "model": "densenet121",
+   "parameters": 8062504,
+   "bn_feeding_relu": 120,
+   "channels": 40800,
+   "certified": 0,
+   "constant": 0,
+   "decayed": 2242,
+   "dormant": 891,
+   "worst_layer": "features.denseblock2.denselayer1.norm1"
+  },
+  {
+   "model": "densenet169",
+   "parameters": 14307880,
+   "bn_feeding_relu": 168,
+   "channels": 77536,
+   "certified": 0,
+   "constant": 0,
+   "decayed": 7667,
+   "dormant": 2581,
+   "worst_layer": "features.denseblock2.denselayer1.norm1"
+  },
+  {
+   "model": "mobilenet_v2",
+   "parameters": 3538984,
+   "bn_feeding_relu": 35,
+   "channels": 15552,
+   "certified": 0,
+   "constant": 0,
+   "decayed": 18,
+   "dormant": 134,
+   "worst_layer": "features.16.conv.1.1"
+  },
+  {
+   "model": "mobilenet_v3_large",
+   "parameters": 5507432,
+   "bn_feeding_relu": 11,
+   "channels": 912,
+   "certified": 0,
+   "constant": 0,
+   "decayed": 0,
+   "dormant": 1,
+   "worst_layer": "features.5.block.1.1"
+  },
+  {
+   "model": "mobilenet_v3_small",
+   "parameters": 2554968,
+   "bn_feeding_relu": 5,
+   "channels": 336,
+   "certified": 0,
+   "constant": 0,
+   "decayed": 30,
+   "dormant": 0,
+   "worst_layer": "features.1.block.0.1"
+  },
+  {
+   "model": "shufflenet_v2_x1_0",
+   "parameters": 2294784,
+   "bn_feeding_relu": 37,
+   "channels": 5630,
+   "certified": 0,
+   "constant": 0,
+   "decayed": 77,
+   "dormant": 104,
+   "worst_layer": "stage4.0.branch2.1"
+  },
+  {
+   "model": "mnasnet1_0",
+   "parameters": 4421232,
+   "bn_feeding_relu": 35,
+   "channels": 17232,
+   "certified": 0,
+   "constant": 0,
+   "decayed": 734,
+   "dormant": 1262,
+   "worst_layer": "layers.12.2.layers.1"
+  },
+  {
+   "model": "regnet_x_400mf",
+   "parameters": 5533832,
+   "bn_feeding_relu": 45,
+   "channels": 12192,
+   "certified": 0,
+   "constant": 0,
+   "decayed": 3,
+   "dormant": 3,
+   "worst_layer": "trunk_output.block3.block3-1.f.a.1"
+  },
+  {
+   "model": "regnet_y_400mf",
+   "parameters": 4371296,
+   "bn_feeding_relu": 33,
+   "channels": 8528,
+   "certified": 0,
+   "constant": 0,
+   "decayed": 2,
+   "dormant": 4,
+   "worst_layer": "trunk_output.block2.block2-1.f.a.1"
+  },
+  {
+   "model": "regnet_y_1_6gf",
+   "parameters": 11255102,
+   "bn_feeding_relu": 55,
+   "channels": 16640,
+   "certified": 0,
+   "constant": 0,
+   "decayed": 1,
+   "dormant": 2,
+   "worst_layer": "trunk_output.block2.block2-1.f.a.1"
+  },
+  {
+   "model": "efficientnet_b0",
+   "parameters": 5330564,
+   "bn_feeding_relu": 0,
+   "channels": 0,
+   "certified": 0,
+   "constant": 0,
+   "decayed": 0,
+   "dormant": 0,
+   "worst_layer": null
+  }
+ ]
+}
