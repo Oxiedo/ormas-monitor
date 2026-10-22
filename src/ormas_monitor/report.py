@@ -97,6 +97,12 @@ def _chart(points: list[tuple[int, float]], marks: list[tuple[int, str, str]]) -
             f"{ms}<polyline points='{line}' fill=none stroke='var(--teal)' stroke-width=2/></svg>")
 
 
+def write_all(run_dir: str | Path) -> dict[str, Path]:
+    """Write every report for a monitored run. Monitor.close() and `ormas-monitor report` call this.
+    Returns {report kind: path}."""
+    return {"report": write_run_report(run_dir)}
+
+
 def write_run_report(run_dir: str | Path) -> Path:
     run_dir = Path(run_dir)
     events = read(run_dir / "diary.jsonl")

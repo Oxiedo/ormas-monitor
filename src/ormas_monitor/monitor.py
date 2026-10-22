@@ -20,6 +20,7 @@ import math
 import platform
 import sys
 from pathlib import Path
+from typing import Callable
 
 import torch
 import torch.nn as nn
@@ -71,6 +72,7 @@ class Monitor:
                  out: str | Path = "ormas_run", repair: bool | str = False,
                  check_every: int = 50, patience: int = 4, sigma: float = 2.5,
                  warmup: int = 8, name: str | None = None,
+                 sinks: "tuple[Callable[[str, dict], None], ...] | list" = (),
                  verbose: bool = True) -> None:
         if repair and optimizer is None:
             raise ValueError("repair needs the optimizer, so its state for repaired channels can be reset")
@@ -81,6 +83,11 @@ class Monitor:
         self.repair_mode = repair
         self.check_every, self.patience, self.sigma, self.warmup = check_every, patience, sigma, warmup
         self.verbose = verbose
+        # Sinks receive every record the monitor writes: sink(kind, payload) with kind in
+        # {"event", "metrics"}. They must not break training: a failing sink is reported once
+        # as a `sink_error` event and then skipped.
+        self.sinks = list(sinks)
+        self._sink_failed: set[int] = set()
 
         self.modules: dict[str, nn.Module] = {
             n: m for n, m in model.named_modules()
@@ -186,10 +193,11 @@ class Monitor:
         self.diary.close()
         if not report:
             return None
-        from .report import write_run_report
-        path = write_run_report(self.out)
-        self._say(f"report written to {path}")
-        return path
+        from .report import write_all
+        paths = write_all(self.out)
+        for p in paths.values():
+            self._say(f"report written to {p}")
+        return paths["report"]
 
     def __enter__(self):
         return self
@@ -202,8 +210,26 @@ class Monitor:
         if self.verbose:
             print(f"[ormas-monitor] {msg}", flush=True)
 
+    def _emit(self, kind: str, payload: dict) -> None:
+        for i, sink in enumerate(self.sinks):
+            if i in self._sink_failed:
+                continue
+            try:
+                sink(kind, payload)
+            except Exception as e:      # a dashboard outage must not stop a training run
+                self._sink_failed.add(i)
+                line = self.diary.write("sink_error", sink=repr(sink), error=f"{type(e).__name__}: {e}")
+                self._say(f"sink {sink!r} failed and is disabled for this run: {e}")
+                for j, other in enumerate(self.sinks):
+                    if j not in self._sink_failed:
+                        try:
+                            other("event", line)
+                        except Exception:
+                            self._sink_failed.add(j)
+
     def _event(self, event: str, step: int, msg: str | None = None, **fields) -> None:
-        self.diary.write(event, step=step, **fields)
+        line = self.diary.write(event, step=step, **fields)
+        self._emit("event", line)
         if msg:
             self._say(f"step {step:,}: {msg}")
 
@@ -222,7 +248,9 @@ class Monitor:
 
         grads = self._check_gradients(step)
         stuck = self._check_channels(step)
-        self._metrics.write(_dumps({"step": step, "loss": loss_val, "grad": grads, "stuck": stuck}) + "\n")
+        row = {"step": step, "loss": loss_val, "grad": grads, "stuck": stuck}
+        self._metrics.write(_dumps(row) + "\n")
+        self._emit("metrics", row)
         self._act_max.clear()
 
     def _check_loss(self, step: int, x: float) -> None:
