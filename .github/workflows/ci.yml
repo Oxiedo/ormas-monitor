@@ -17,6 +17,7 @@ env:
   WANDB_MODE: disabled
   HF_HUB_OFFLINE: "1"
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PYTHONUTF8: "1"          # Windows consoles default to cp1252; the reports and CLI print Unicode
 
 jobs:
   lint:
