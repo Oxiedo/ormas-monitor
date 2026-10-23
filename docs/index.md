@@ -12,14 +12,23 @@ It runs entirely on your machine. The core package makes no network calls and ne
 
 ## Start here
 
+### I am an engineer
+
 | You want to | Go to |
 |---|---|
-| Check a saved model file, no code changes | [Quickstart: check a file](quickstart.md#1-check-a-saved-model) |
-| Watch a training run | [Quickstart: two lines](quickstart.md#2-watch-a-training-run) |
-| See it catch a broken layer | [Quickstart: the demo](quickstart.md#3-run-the-demo) |
+| See it work end to end, with real output | [Tutorial: five minutes](tutorial.md) |
+| Check a saved model file, with no code changes | [Quickstart: check a file](quickstart.md#1-check-a-saved-model) |
+| Watch a training run (plain PyTorch, Lightning or Hugging Face) | [Quickstart: two lines](quickstart.md#2-watch-a-training-run) |
 | Understand what "certified dead" means | [Dead channels and the certificate](concepts/dead-channels.md) |
-| Decide whether your team should use it | [For leaders](for-leaders.md) |
 | Know what it does not do | [Limitations](limitations.md) |
+
+### I am not technical (founder, manager, CFO, compliance)
+
+| You want to | Go to |
+|---|---|
+| Understand it in plain words, in two minutes | [For leaders](for-leaders.md) |
+| Know why a team would use it | [Why use it](why.md) |
+| Get help, or shape what we build next | [Work with us](work-with-us.md) |
 
 ## The supporting tools
 
@@ -33,5 +42,9 @@ These exist to support the monitor. They are not separate products.
 
 On one seed (0) and one Apple M-series Mac (MPS, torch 2.11), on CIFAR-10: after two conv layers of a trained CNN were zeroed, a watch-only run stayed at **10.00%** (chance) for all 12 epochs, while the run with repair recovered to **76.77%** (healthy: 78.84%). Monitoring cost **+3.6%** median epoch time at the default `check_every=50`. See [Results](results.md) for every number and the command that reproduces it.
 
-!!! note "Not yet tested on NVIDIA/Linux, multi-GPU or at scale"
-    All measured numbers come from one Apple-silicon Mac. A GPU stress test is planned. Until it has run, treat performance on other hardware as unmeasured.
+!!! note "Not yet tested on NVIDIA GPUs, multi-GPU or at scale"
+    The test suite runs automatically on Linux, macOS and Windows. All measured numbers come from one Apple-silicon Mac. A GPU stress test is planned; until it has run, treat performance on other hardware as unmeasured.
+
+## Work with us
+
+The tool is free. Oxiedo is looking for its first design partners, teams who train their own models and want help getting more out of their runs. See [Work with us](work-with-us.md) or email [raadh@oxiedo.com](mailto:raadh@oxiedo.com).

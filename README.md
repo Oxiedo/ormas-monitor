@@ -109,6 +109,16 @@ Python 3.9+, PyTorch 2.3+ (declared). Run so far on Python 3.13 with PyTorch 2.1
 
 Hosted: https://oxiedo.github.io/ormas-monitor/
 
+## Work with us
+
+`ormas-monitor` is free and stays free. **Oxiedo is looking for its first design partners:** teams who train their own models, especially vision models, and want help getting more out of their runs.
+- **What you get:** setup help, a review of your reports, early access to team features, and a say in what we build next.
+- **What we ask:** a 30-minute call and honest feedback.
+
+Email **raadh@oxiedo.com** (subject: "design partner"), or read [Work with us](https://github.com/Oxiedo/ormas-monitor/blob/main/docs/work-with-us.md).
+
+**Not technical?** Start with [For leaders](https://github.com/Oxiedo/ormas-monitor/blob/main/docs/for-leaders.md): what it is in plain words, and what you would receive.
+
 ## Citation
 
 If you use the dead-channel certificate, please cite the paper ([`CITATION.cff`](https://github.com/Oxiedo/ormas-monitor/blob/main/CITATION.cff)):
