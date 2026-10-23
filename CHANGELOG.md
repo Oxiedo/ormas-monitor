@@ -2,7 +2,7 @@
 
 All notable changes to `ormas-monitor` are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [semantic versioning](https://semver.org/) (before 1.0, a minor release may change the API).
 
-## [Unreleased] — 0.2.0
+## [0.2.0] — 2026-10-23
 
 ### Core engine
 - `MonitorConfig`: every threshold in one frozen, validated dataclass, stored whole in `run_start.config`. The defaults reproduce 0.1 behaviour. The old keyword arguments (`check_every`, `patience`, `sigma`, `warmup`) remain as shortcuts.
@@ -72,5 +72,5 @@ First release.
 - `ormas-monitor demo`: the CIFAR-10 dead-layer experiment, watch-only vs repair.
 - Examples: full demo, overhead measurement, torchvision scan.
 
-[Unreleased]: https://github.com/Oxiedo/ormas-monitor/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/Oxiedo/ormas-monitor/releases/tag/v0.1.0
+[0.2.0]: https://github.com/Oxiedo/ormas-monitor/releases/tag/v0.2.0
+[0.1.0]: https://github.com/Oxiedo/ormas-monitor/commit/d0d7e09
