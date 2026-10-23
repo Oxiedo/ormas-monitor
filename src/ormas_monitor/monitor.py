@@ -882,14 +882,14 @@ class Monitor:
                 words = {"no_gradient": "gradient is exactly zero",
                          "vanishing": "gradient collapsed",
                          "exploding": "gradient exploded"}[cond]
-                self._event("alarm", step, f"{name} ({self.kinds[name]}): {words} "
+                self._event("alarm", step, f"layer {name} ({self.kinds[name]}): {words} "
                             f"({g:.3g} vs normal {10 ** b.mean:.3g})",
                             severity="warning", layer=name, kind=self.kinds[name],
                             diagnosis=cond, grad_norm=g, baseline=10 ** b.mean, sigma=cfg.sigma)
             return
         b.pending, b.pending_count = None, 0
         if b.alarm:
-            self._event("alarm_cleared", step, f"{name}: back to normal", layer=name,
+            self._event("alarm_cleared", step, f"layer {name}: gradient back to normal", layer=name,
                         diagnosis=b.alarm, grad_norm=g, baseline=10 ** b.mean)
             b.alarm = None
         b.update(x, cfg.baseline_rate_floor)
@@ -1023,17 +1023,17 @@ class Monitor:
             if level != self._channel_level.get(name, "none"):
                 if level != "none":
                     self.counts["stuck_layers"] += 1
-                parts = []
-                if n_cert:
-                    parts.append(f"{n_cert} certified dead")
-                if n_flat:
-                    parts.append(f"{n_flat} flat")
-                if n_dec:
-                    parts.append(f"{n_dec} decayed to ~0")
-                if n_obs:
-                    parts.append(f"{n_obs} silent for several checks")
-                msg = (f"{name} ({self.kinds[name]}): {stuck}/{n} channels stuck: " + ", ".join(parts)
-                       if level != "none" else f"{name}: all channels active again")
+                # "stuck" is what the weights show (certified, constant, decayed); "silent" is unproven.
+                proven = [f"{c} {w}" for c, w in ((n_cert, "certified dead"), (n_flat, "constant"),
+                                                   (n_dec, "decayed to ~0")) if c]
+                where = f"layer {name} ({self.kinds[name]})"
+                if level == "none":
+                    msg = f"layer {name}: all channels active again"
+                elif proven:
+                    msg = f"{where}: {stuck - n_obs} of {n} channels stuck ({', '.join(proven)})" + (
+                        f", {n_obs} more silent for several checks" if n_obs else "")
+                else:
+                    msg = f"{where}: {n_obs} of {n} channels silent for several checks (not proven dead)"
                 self._event("channels" if level != "none" else "channels_cleared", step, msg,
                             severity="warning" if level != "none" else "info", layer=name,
                             batchnorm=ch.bn_name, channels=n, level=level,
@@ -1087,7 +1087,7 @@ class Monitor:
         self.counts["repairs"] += 1
         self.counts["channels_repaired"] += res.count
         rel = f", ||dW||/||W|| = {res.relative_change:.3g}" if res.relative_change is not None else ""
-        self._event("repair", step, f"{name}: re-initialised {res.count} stuck channels{rel}",
+        self._event("repair", step, f"layer {name}: repaired {res.count} stuck channels (re-initialised){rel}",
                     severity="action", layer=name, batchnorm=self.pairs.get(name),
                     channels=idx.tolist()[:self.config.channel_list_limit], count=res.count,
                     method=METHOD, optimizer_slices_reset=res.optimizer_slices_reset,

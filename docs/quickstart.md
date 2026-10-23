@@ -62,17 +62,17 @@ Call `step()` after `backward()`: if no watched layer has a gradient at a check,
 When something goes wrong, the monitor prints one line per event. This is real output (ormas-monitor 0.2.0, torch 2.11, CPU) from a small CNN, two Conv-BatchNorm-ReLU blocks and a linear head, trained with AdamW on synthetic data; at step 60 the second conv layer was zeroed and the optimizer state cleared, with `repair=True`, `check_every=5` and `out="run"`:
 
 ```text
-[ormas-monitor] step 60: 3 (Conv2d): 16/16 channels stuck: 16 certified dead
-[ormas-monitor] step 65: 0 (Conv2d): gradient is exactly zero (0 vs normal 0.178)
-[ormas-monitor] step 65: 1 (BatchNorm2d): gradient is exactly zero (0 vs normal 0.0226)
-[ormas-monitor] step 65: 3 (Conv2d): gradient is exactly zero (0 vs normal 0.0798)
-[ormas-monitor] step 65: 4 (BatchNorm2d): gradient is exactly zero (0 vs normal 0.0994)
-[ormas-monitor] step 65: 3: re-initialised 16 stuck channels
-[ormas-monitor] step 70: 0: back to normal
-[ormas-monitor] step 70: 1: back to normal
-[ormas-monitor] step 70: 3: back to normal
-[ormas-monitor] step 70: 4: back to normal
-[ormas-monitor] step 70: 3: all channels active again
+[ormas-monitor] step 60: layer 3 (Conv2d): 16 of 16 channels stuck (16 certified dead)
+[ormas-monitor] step 65: layer 0 (Conv2d): gradient is exactly zero (0 vs normal 0.178)
+[ormas-monitor] step 65: layer 1 (BatchNorm2d): gradient is exactly zero (0 vs normal 0.0226)
+[ormas-monitor] step 65: layer 3 (Conv2d): gradient is exactly zero (0 vs normal 0.0798)
+[ormas-monitor] step 65: layer 4 (BatchNorm2d): gradient is exactly zero (0 vs normal 0.0994)
+[ormas-monitor] step 65: layer 3: repaired 16 stuck channels (re-initialised)
+[ormas-monitor] step 70: layer 0: gradient back to normal
+[ormas-monitor] step 70: layer 1: gradient back to normal
+[ormas-monitor] step 70: layer 3: gradient back to normal
+[ormas-monitor] step 70: layer 4: gradient back to normal
+[ormas-monitor] step 70: layer 3: all channels active again
 [ormas-monitor] report written to run/report.html
 [ormas-monitor] report written to run/summary.html
 [ormas-monitor] report written to run/summary.md
