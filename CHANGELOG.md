@@ -2,6 +2,11 @@
 
 All notable changes to `ormas-monitor` are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [semantic versioning](https://semver.org/) (before 1.0, a minor release may change the API).
 
+## [0.2.1] — 2026-10-23
+
+### Fixed
+- A fresh `pip install ormas-monitor` no longer prints PyTorch's "Failed to initialize NumPy" warning: `numpy` is now a dependency.
+
 ## [0.2.0] — 2026-10-23
 
 ### Core engine
@@ -72,5 +77,6 @@ First release.
 - `ormas-monitor demo`: the CIFAR-10 dead-layer experiment, watch-only vs repair.
 - Examples: full demo, overhead measurement, torchvision scan.
 
+[0.2.1]: https://github.com/Oxiedo/ormas-monitor/releases/tag/v0.2.1
 [0.2.0]: https://github.com/Oxiedo/ormas-monitor/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Oxiedo/ormas-monitor/commit/d0d7e09

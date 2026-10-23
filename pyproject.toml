@@ -15,7 +15,8 @@ requires-python = ">=3.9"
 # torch >= 2.3: the oldest release with the device-generic torch.amp.GradScaler. Everything else the
 # package uses is older: torch.load(mmap=True) is 2.1, torch.load(weights_only=...) is 1.13,
 # torch.linalg.vector_norm is 1.10.
-dependencies = ["torch>=2.3"]
+# numpy: torch does not require it, but warns on import when it is missing.
+dependencies = ["torch>=2.3", "numpy"]
 keywords = [
   "pytorch", "deep learning", "training", "monitoring", "dead neurons", "dead channels",
   "batchnorm", "relu", "checkpoint", "model audit", "ml observability",
