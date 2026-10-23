@@ -23,3 +23,4 @@ ormas_run/
 
 # public verification keys for the signed samples are meant to be shared
 !sample_reports/**/*.pub.pem
+test-results.xml
