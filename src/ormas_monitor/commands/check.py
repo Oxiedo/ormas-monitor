@@ -58,7 +58,8 @@ def _finite(obj: object) -> object:
 
 
 def run(a) -> int:
-    from ..checkpoint import CheckpointError, run as check
+    from ..checkpoint import CheckpointError
+    from ..checkpoint import run as check
     from ..report import write_check_report
     t0 = time.perf_counter()
     try:

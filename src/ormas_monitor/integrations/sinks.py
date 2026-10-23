@@ -283,7 +283,7 @@ class MLflowSink:
 _STOP = object()
 
 
-def _flush_at_exit(ref: "weakref.ReferenceType[WebhookSink]") -> None:
+def _flush_at_exit(ref: weakref.ReferenceType[WebhookSink]) -> None:
     sink = ref()
     if sink is not None:
         sink.close(timeout=5.0)
@@ -320,7 +320,7 @@ class WebhookSink:
         self.headers = {"Content-Type": "application/json", "User-Agent": "ormas-monitor",
                         **dict(headers or {})}
         self.blocking = blocking
-        self._queue: "queue.Queue[Any]" = queue.Queue(maxsize=max_pending)
+        self._queue: queue.Queue[Any] = queue.Queue(maxsize=max_pending)
         self._thread: threading.Thread | None = None
         self._error: BaseException | None = None
         self.sent = 0

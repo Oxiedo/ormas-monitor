@@ -47,7 +47,7 @@ def train(model, mon, opt, steps: int, after=None, seed: int = 1) -> None:
 
 def events(run: Path) -> list[dict]:
     """Every diary line of a run, after asserting each one matches the schema."""
-    lines = [json.loads(l) for l in open(Path(run) / "diary.jsonl")]
+    lines = [json.loads(l) for l in (Path(run) / "diary.jsonl").read_text().splitlines() if l.strip()]
     assert_valid(lines)
     return lines
 

@@ -223,7 +223,7 @@ def test_layers_filter(tmp_path):
     ev = events(tmp_path / "run")
     rep = next(e for e in ev if e["event"] == "repair")
     assert rep["layer"] == "3" and rep["batchnorm"] == "4"    # BatchNorm pairing still found
-    metrics = [json.loads(l) for l in open(tmp_path / "run" / "metrics.jsonl")]
+    metrics = [json.loads(l) for l in (tmp_path / "run" / "metrics.jsonl").read_text().splitlines() if l.strip()]
     assert all(set(m["grad"]) <= {"3"} for m in metrics)
     man = next(e for e in ev if e["event"] == "manifest")
     assert man["layers"] == {"monitored": 1, "total": 5, "filter": ["3"]}
@@ -240,7 +240,7 @@ def test_note_loss(tmp_path):
         mon.note_loss(torch.tensor(loss) if loss is not None else None)
         mon.step(1.25 if i == 1 else None)          # an explicit loss wins
     mon.close(report=False)
-    rows = [json.loads(l) for l in open(tmp_path / "run" / "metrics.jsonl")]
+    rows = [json.loads(l) for l in (tmp_path / "run" / "metrics.jsonl").read_text().splitlines() if l.strip()]
     assert [r["loss"] for r in rows] == [2.5, 1.25, None]
     with pytest.raises(RuntimeError):
         mon.step()

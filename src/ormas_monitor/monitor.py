@@ -66,8 +66,16 @@ import torch.nn as nn
 from . import __version__
 from .config import MonitorConfig
 from .diary import Diary, file_sha256
-from .repair import METHOD, MODIFICATION_CLASS, decay_reason, find_optimizer, moving_mask, optimizer_family, \
-    repair_channels, repair_generator
+from .repair import (
+    METHOD,
+    MODIFICATION_CLASS,
+    decay_reason,
+    find_optimizer,
+    moving_mask,
+    optimizer_family,
+    repair_channels,
+    repair_generator,
+)
 from .schema import RECORD_VERSION
 from .structure import BN_KINDS, CONV_KINDS, RELU_KINDS, channel_masks
 

@@ -121,5 +121,5 @@ def test_fsdp_refuses_repair_and_disables_the_certificate(tmp_path):
     assert man["channel_checks"] is False and man["distributed"]["mode"] == "fsdp"
     assert any("FSDP" in n for n in man["notes"])
     assert not any(e["event"] in ("certificate", "channels", "repair") for e in ev)
-    rows = [json.loads(l) for l in open(tmp_path / "run" / "metrics.jsonl")]
+    rows = [json.loads(l) for l in (tmp_path / "run" / "metrics.jsonl").read_text().splitlines() if l.strip()]
     assert len(rows) == 3 and all(r["stuck"] == {} for r in rows)

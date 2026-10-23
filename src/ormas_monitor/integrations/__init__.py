@@ -15,8 +15,16 @@ from __future__ import annotations
 import importlib
 from typing import Any
 
-from .sinks import (SEVERITY_RANK, ConsoleSink, LoggingSink, MLflowSink, TensorBoardSink,
-                    WandbSink, WebhookSink, format_event)
+from .sinks import (
+    SEVERITY_RANK,
+    ConsoleSink,
+    LoggingSink,
+    MLflowSink,
+    TensorBoardSink,
+    WandbSink,
+    WebhookSink,
+    format_event,
+)
 
 _LAZY = {
     "LightningCallback": ("lightning", "OrmasMonitorCallback"),
@@ -25,8 +33,18 @@ _LAZY = {
     "huggingface": ("huggingface", None),
 }
 
-__all__ = ["ConsoleSink", "HuggingFaceCallback", "LightningCallback", "LoggingSink", "MLflowSink",
-           "SEVERITY_RANK", "TensorBoardSink", "WandbSink", "WebhookSink", "format_event"]
+__all__ = [
+    "SEVERITY_RANK",
+    "ConsoleSink",
+    "HuggingFaceCallback",
+    "LightningCallback",
+    "LoggingSink",
+    "MLflowSink",
+    "TensorBoardSink",
+    "WandbSink",
+    "WebhookSink",
+    "format_event",
+]
 
 
 def __getattr__(name: str) -> Any:

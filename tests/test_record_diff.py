@@ -59,7 +59,7 @@ def test_result_shape_matches_the_contract(runs):
     for side in ("a", "b"):
         assert {"path", "name", "model", "architecture_sha256", "steps", "intact"} <= set(r[side])
     assert {"same_architecture", "config_changes", "events", "layers", "verdict"} <= set(r)
-    assert all(LAYER_KEYS <= set(row) for row in r["layers"])
+    assert all(set(row) >= LAYER_KEYS for row in r["layers"])
     json.dumps(r)                                   # D renders it; it must serialise
 
 

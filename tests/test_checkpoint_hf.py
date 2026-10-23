@@ -91,5 +91,5 @@ def test_arch_that_does_not_match_is_an_error(tmp_path):
 
 def test_arch_hf_needs_config(tmp_path):
     torch.save(torch.nn.BatchNorm1d(4).state_dict(), tmp_path / "m.pt")
-    with pytest.raises(CheckpointError, match="config.json"):
+    with pytest.raises(CheckpointError, match=r"config\.json"):
         run(tmp_path / "m.pt", arch="hf")

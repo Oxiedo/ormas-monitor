@@ -38,14 +38,20 @@ try:
     import lightning.pytorch as pl
 except ImportError:
     try:
-        import pytorch_lightning as pl    # type: ignore[no-redef]
+        import pytorch_lightning as pl  # type: ignore[no-redef]
     except ImportError as e:
         raise ImportError('ormas_monitor.integrations.lightning needs Lightning: '
                           'pip install "ormas-monitor[lightning]"') from e
 
 from ..monitor import Monitor
-from ._common import LossWindow, check_monitor_kwargs, safe_close, unwrap_optimizer, usable_optimizer, \
-    without_optimizer
+from ._common import (
+    LossWindow,
+    check_monitor_kwargs,
+    safe_close,
+    unwrap_optimizer,
+    usable_optimizer,
+    without_optimizer,
+)
 from .sinks import TensorBoardSink, WandbSink
 
 
@@ -83,7 +89,7 @@ class OrmasMonitorCallback(pl.Callback):
         self._sinks: list[Any] = []
 
     # ------------------------------------------------------------------ Lightning hooks
-    def on_fit_start(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
+    def on_fit_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
         self._close()
         optimizers = trainer.optimizers
         kwargs = dict(self.monitor_kwargs)
@@ -110,12 +116,12 @@ class OrmasMonitorCallback(pl.Callback):
         self.monitor = Monitor(trainer.lightning_module, self._optimizer, **kwargs)
         self._active = True
 
-    def on_before_backward(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule",
+    def on_before_backward(self, trainer: pl.Trainer, pl_module: pl.LightningModule,
                            loss: torch.Tensor) -> None:
         if self._active:
             self._losses.add(loss)
 
-    def on_before_optimizer_step(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule",
+    def on_before_optimizer_step(self, trainer: pl.Trainer, pl_module: pl.LightningModule,
                                  optimizer: Any) -> None:
         mon = self.monitor
         if mon is None or not self._active:
@@ -127,10 +133,10 @@ class OrmasMonitorCallback(pl.Callback):
             mon.note_loss(_unscale(trainer, loss))
         mon.step()
 
-    def on_fit_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
+    def on_fit_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
         self._close()
 
-    def on_exception(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule",
+    def on_exception(self, trainer: pl.Trainer, pl_module: pl.LightningModule,
                      exception: BaseException) -> None:
         self._close()
 
@@ -149,7 +155,7 @@ class OrmasMonitorCallback(pl.Callback):
         self.report, self.close_error = safe_close(self.monitor, self._sinks, self.write_report)
 
 
-def _unscale(trainer: "pl.Trainer", loss: torch.Tensor) -> torch.Tensor:
+def _unscale(trainer: pl.Trainer, loss: torch.Tensor) -> torch.Tensor:
     """Undo AMP loss scaling. The scale is constant within an accumulation window (``update()``
     runs after ``optimizer.step()``), so dividing the window sum once is exact."""
     scaler = getattr(getattr(trainer, "precision_plugin", None), "scaler", None)
@@ -161,7 +167,7 @@ def _unscale(trainer: "pl.Trainer", loss: torch.Tensor) -> torch.Tensor:
     return loss / scaler.get_scale()
 
 
-def _logger_sinks(trainer: "pl.Trainer") -> list[Any]:
+def _logger_sinks(trainer: pl.Trainer) -> list[Any]:
     """Sinks writing into the trainer's own TensorBoard / W&B experiments."""
     out: list[Any] = []
     for lg in trainer.loggers:

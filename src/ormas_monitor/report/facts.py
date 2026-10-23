@@ -90,13 +90,13 @@ class Stuck:
     decayed: int = 0
 
     @classmethod
-    def from_metrics(cls, row: Any) -> "Stuck":
+    def from_metrics(cls, row: Any) -> Stuck:
         """`[certified, constant, silent, decayed]`; v0.1 records wrote 3 elements, no `decayed`."""
         vals = [int(v) for v in (row or [])][:4] + [0] * 4
         return cls(*vals[:4])
 
     @classmethod
-    def from_event(cls, e: dict) -> "Stuck":
+    def from_event(cls, e: dict) -> Stuck:
         """From a `channels` event; `n_*` fields when present, else lengths of the (truncated) lists."""
         def n(key: str) -> int:
             v = e.get("n_" + key)
@@ -112,7 +112,7 @@ class Stuck:
     def total(self) -> int:
         return self.exact + self.silent
 
-    def minus(self, n: int) -> "Stuck":
+    def minus(self, n: int) -> Stuck:
         """Counts after `n` channels were repaired (repairs take proven, constant, decayed, silent)."""
         out = []
         for v in (self.certified, self.constant, self.decayed, self.silent):
@@ -121,7 +121,7 @@ class Stuck:
             n -= take
         return Stuck(certified=out[0], constant=out[1], decayed=out[2], silent=out[3])
 
-    def peak(self, other: "Stuck") -> "Stuck":
+    def peak(self, other: Stuck) -> Stuck:
         return Stuck(*(max(a, b) for a, b in zip(
             (self.certified, self.constant, self.silent, self.decayed),
             (other.certified, other.constant, other.silent, other.decayed))))

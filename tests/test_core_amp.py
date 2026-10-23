@@ -34,7 +34,7 @@ def run(tmp_path, mode, steps=30, poison_at=None, check_every=1):
         else:
             opt.step()
     mon.close(report=False)
-    rows = [json.loads(l) for l in open(tmp_path / mode / "metrics.jsonl")]
+    rows = [json.loads(l) for l in (tmp_path / mode / "metrics.jsonl").read_text().splitlines() if l.strip()]
     return mon, events(tmp_path / mode), rows
 
 

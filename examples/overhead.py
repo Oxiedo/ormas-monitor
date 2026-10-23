@@ -11,8 +11,8 @@ import time
 
 import torch
 
-from ormas_monitor.demo import StandardCNN, epoch, load_cifar
 from ormas_monitor import Monitor
+from ormas_monitor.demo import StandardCNN, epoch, load_cifar
 
 
 def sync(dev):

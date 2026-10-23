@@ -78,7 +78,7 @@ def loader(n: int = 64) -> torch.utils.data.DataLoader:
     return torch.utils.data.DataLoader(ds, batch_size=8)
 
 
-def fit(module: Module, cb: OrmasMonitorCallback, tmp: Path, **trainer_kw) -> "pl.Trainer":
+def fit(module: Module, cb: OrmasMonitorCallback, tmp: Path, **trainer_kw) -> pl.Trainer:
     kw = dict(accelerator="cpu", devices=1, logger=False, enable_checkpointing=False,
               enable_progress_bar=False, enable_model_summary=False, default_root_dir=str(tmp))
     kw.update(trainer_kw)

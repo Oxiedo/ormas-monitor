@@ -74,7 +74,7 @@ def lesion(net: Net) -> None:
 
 
 def train(model: nn.Module, cb: OrmasMonitorCallback, tmp: Path, eval_dataset: Data | None = None,
-          **args_kw) -> "transformers.Trainer":
+          **args_kw) -> transformers.Trainer:
     kw = dict(output_dir=str(tmp), max_steps=4, per_device_train_batch_size=8, learning_rate=1e-2,
               report_to=[], save_strategy="no", logging_strategy="no", use_cpu=True,
               disable_tqdm=True, dataloader_pin_memory=False, seed=0)

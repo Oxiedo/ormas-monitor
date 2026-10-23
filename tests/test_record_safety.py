@@ -70,7 +70,7 @@ def test_sign_refuses_a_symlinked_signature_and_leaves_its_target_alone(run, key
     victim = tmp_path / "victim_notes.txt"
     victim.write_text("important reviewer notes\n")
     os.symlink(victim, run / "record.sig")
-    with pytest.raises(RecordError, match="record.sig is a symbolic link"):
+    with pytest.raises(RecordError, match=r"record\.sig is a symbolic link"):
         sign(run, keys[0])
     assert cli(sign_cmd, ["sign", str(run), "--key", str(keys[0])]) == 2
     assert "symbolic link" in capsys.readouterr().err
@@ -82,7 +82,7 @@ def test_sign_refuses_a_symlinked_signature_and_leaves_its_target_alone(run, key
 def test_seal_refuses_a_dangling_record_json_link_and_creates_nothing(run, tmp_path):
     target = tmp_path / "created_by_seal.json"
     os.symlink(target, run / "record.json")
-    with pytest.raises(RecordError, match="record.json is a symbolic link"):
+    with pytest.raises(RecordError, match=r"record\.json is a symbolic link"):
         seal(run)
     assert cli(sign_cmd, ["sign", str(run), "--seal-only"]) == 2
     assert not target.exists() and not os.path.lexists(target)

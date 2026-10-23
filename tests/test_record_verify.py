@@ -365,6 +365,7 @@ def test_sign_refuses_a_broken_record(run, keys):
 
 def test_missing_cryptography_gives_install_hint(run, monkeypatch, tmp_path):
     import sys
+
     from ormas_monitor.record import keygen
     from ormas_monitor.record.signing import SigningUnavailable
     monkeypatch.setitem(sys.modules, "cryptography.hazmat.primitives", None)

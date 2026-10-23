@@ -82,7 +82,7 @@ class TensorSource:
     format = "tensors"
 
     def __init__(self) -> None:
-        self.info: "OrderedDict[str, TensorInfo]" = OrderedDict()
+        self.info: OrderedDict[str, TensorInfo] = OrderedDict()
         self.files: list[str] = []
         self.ordered = True
         self.streamed = True
@@ -110,7 +110,7 @@ class TensorSource:
     def close(self) -> None:
         """Release file handles and memory maps."""
 
-    def __enter__(self) -> "TensorSource":
+    def __enter__(self) -> TensorSource:
         return self
 
     def __exit__(self, *exc: object) -> None:
@@ -170,7 +170,7 @@ class SafetensorsSource(TensorSource):
             except Exception as e:      # safetensors raises its own error types
                 raise CheckpointError(f"could not read {f.name}: {e}") from e
             self._handles.append(h)
-            for raw in h.keys():
+            for raw in h.keys():  # noqa: SIM118 (safe_open handles are not iterable)
                 sl = h.get_slice(raw)
                 dtype = SAFETENSORS_DTYPES.get(sl.get_dtype(), sl.get_dtype().lower())
                 name = self._add(raw, tuple(sl.get_shape()), dtype)
@@ -362,6 +362,6 @@ def open_source(path: str | Path, trust: bool = False) -> TensorSource:
     return src
 
 
-def as_source(tensors: "TensorSource | Mapping[str, object]") -> TensorSource:
+def as_source(tensors: TensorSource | Mapping[str, object]) -> TensorSource:
     """Accept either a TensorSource or an in-memory mapping of name -> tensor."""
     return tensors if isinstance(tensors, TensorSource) else DictSource(tensors)

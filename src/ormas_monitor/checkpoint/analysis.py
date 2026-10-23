@@ -109,9 +109,9 @@ class _Reader:
         return self.rowmax[name].unsqueeze(1)
 
 
-def _groups(src: TensorSource) -> "OrderedDict[str, dict[str, str]]":
+def _groups(src: TensorSource) -> OrderedDict[str, dict[str, str]]:
     """prefix -> {suffix: full tensor name}, in file order."""
-    groups: "OrderedDict[str, dict[str, str]]" = OrderedDict()
+    groups: OrderedDict[str, dict[str, str]] = OrderedDict()
     for name in src.info:
         prefix, _, suffix = name.rpartition(".")
         groups.setdefault(prefix, {})[suffix] = name
@@ -137,7 +137,7 @@ def batchnorm_names(src: TensorSource) -> list[str]:
     return [p for p, g in _groups(src).items() if all(s in g for s in BN_SUFFIXES)]
 
 
-def _producer_for(bn: str, size: int, groups: "OrderedDict[str, dict[str, str]]", src: TensorSource) -> str | None:
+def _producer_for(bn: str, size: int, groups: OrderedDict[str, dict[str, str]], src: TensorSource) -> str | None:
     """Find the Conv/Linear feeding BatchNorm `bn`: by name first, then by file order.
 
     Safetensors stores names sorted, so for it the file-order fallback is replaced by "the only
@@ -396,7 +396,7 @@ def analyse(reader: _Reader, stats: dict[str, TensorStats], relu_after: set[str]
             "norm_layers": 0 if centred else len(norm_names), "dtypes": dtypes, "notes": notes}
 
 
-def check(tensors: "TensorSource | Mapping[str, torch.Tensor]", relu_after: set[str] | None = None,
+def check(tensors: TensorSource | Mapping[str, torch.Tensor], relu_after: set[str] | None = None,
           *, known: set[str] | None = None, config: CheckConfig | None = None) -> dict:
     """Weights-only health check of a state dict or an open TensorSource.
 

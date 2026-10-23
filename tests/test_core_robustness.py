@@ -38,7 +38,7 @@ def test_empty_batch_does_not_crash(tmp_path):
 def test_sparse_embedding_gradients(tmp_path):
     m = nn.Sequential(nn.Embedding(10, 4, sparse=True), nn.Linear(4, 1))
     loop(m, torch.optim.SGD(m.parameters(), lr=0.1), lambda: torch.randint(0, 10, (8,)), tmp_path / "run")
-    rows = [json.loads(l) for l in open(tmp_path / "run" / "metrics.jsonl")]
+    rows = [json.loads(l) for l in (tmp_path / "run" / "metrics.jsonl").read_text().splitlines() if l.strip()]
     assert all("0" in r["grad"] and r["grad"]["0"] > 0 for r in rows)
 
 
@@ -53,7 +53,7 @@ def test_model_split_across_devices(tmp_path):
             return self.b(self.a(x).to("mps"))
     m = Split()
     loop(m, torch.optim.SGD(m.parameters(), lr=0.1), lambda: torch.randn(8, 4), tmp_path / "run")
-    rows = [json.loads(l) for l in open(tmp_path / "run" / "metrics.jsonl")]
+    rows = [json.loads(l) for l in (tmp_path / "run" / "metrics.jsonl").read_text().splitlines() if l.strip()]
     assert set(rows[0]["grad"]) == {"a", "b"}
 
 
@@ -71,7 +71,7 @@ def test_unreduced_loss_is_averaged_once(tmp_path):
     ev = events(tmp_path / "run")
     red = [e for e in ev if e["event"] == "loss_reduced"]
     assert len(red) == 1 and red[0]["elements"] == 4
-    rows = [json.loads(l) for l in open(tmp_path / "run" / "metrics.jsonl")]
+    rows = [json.loads(l) for l in (tmp_path / "run" / "metrics.jsonl").read_text().splitlines() if l.strip()]
     assert all(isinstance(r["loss"], float) for r in rows)
 
 
@@ -188,7 +188,7 @@ def test_non_torch_optimizer_degrades(tmp_path):
     assert any("EngineOptimizer is not a torch.optim.Optimizer" in n for n in man["notes"])
     assert not any(p["certificate"] for p in man["producers"])
     assert mon.counts["repairs"] == 0
-    with pytest.raises(ValueError, match="repair needs a torch.optim.Optimizer"):
+    with pytest.raises(ValueError, match=r"repair needs a torch\.optim\.Optimizer"):
         Monitor(m, EngineOptimizer(), out=tmp_path / "x", repair=True, verbose=False)
 
 

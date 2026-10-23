@@ -26,16 +26,37 @@ from typing import Mapping
 
 import torch
 
-from .analysis import (CheckConfig, _batchnorm_pass, _embedding_rows_unchanged, _Reader, analyse,
-                       batchnorm_names, check, compare, diff_findings, is_embedding, sort_findings)
+from .analysis import (
+    CheckConfig,
+    _batchnorm_pass,
+    _embedding_rows_unchanged,
+    _Reader,
+    analyse,
+    batchnorm_names,
+    check,
+    compare,
+    diff_findings,
+    is_embedding,
+    sort_findings,
+)
 from .sources import CheckpointError, TensorSource, open_source
 from .wiring import Wiring, arch_relu_followers, resolve
 
-__all__ = ["run", "check", "diff", "load_tensors", "open_source", "arch_relu_followers",
-           "CheckpointError", "CheckConfig", "TensorSource", "Wiring"]
+__all__ = [
+    "CheckConfig",
+    "CheckpointError",
+    "TensorSource",
+    "Wiring",
+    "arch_relu_followers",
+    "check",
+    "diff",
+    "load_tensors",
+    "open_source",
+    "run",
+]
 
 
-def load_tensors(path: str | Path, trust: bool = False) -> "OrderedDict[str, torch.Tensor]":
+def load_tensors(path: str | Path, trust: bool = False) -> OrderedDict[str, torch.Tensor]:
     """Every tensor in a checkpoint file or folder, in memory. Prefer `run`, which streams."""
     with open_source(path, trust) as src:
         return OrderedDict(src.items())
@@ -78,8 +99,8 @@ def _diff_pass(new: _Reader, old: _Reader) -> tuple[dict, dict]:
                    "reshaped": reshaped, "dtype_changed": dtype_changed, "embedding_rows_unchanged": emb}
 
 
-def diff(new: "TensorSource | Mapping[str, torch.Tensor]",
-         old: "TensorSource | Mapping[str, torch.Tensor]", config: CheckConfig | None = None) -> dict:
+def diff(new: TensorSource | Mapping[str, torch.Tensor],
+         old: TensorSource | Mapping[str, torch.Tensor], config: CheckConfig | None = None) -> dict:
     """What changed between two sets of weights (streamed when given TensorSources)."""
     from .sources import as_source
     cfg = config or CheckConfig()

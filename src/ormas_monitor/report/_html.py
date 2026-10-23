@@ -191,9 +191,9 @@ def duration(seconds: float | None) -> str:
     if s < 60:
         return f"{s:.0f} s"
     if s < 3600:
-        m, sec = divmod(int(round(s)), 60)
+        m, sec = divmod(round(s), 60)
         return f"{m} min {sec:02d} s"
-    h, rem = divmod(int(round(s)), 3600)
+    h, rem = divmod(round(s), 3600)
     if h < 48:
         return f"{h} h {rem // 60:02d} min"
     return f"{h / 24:.1f} days"

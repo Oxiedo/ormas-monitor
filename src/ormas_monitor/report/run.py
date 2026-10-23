@@ -9,8 +9,20 @@ from html import escape
 from pathlib import Path
 from typing import Optional
 
-from ._html import (duration, fmt, layer_html, legend, loss_chart, page, plural, share, table, tag, timeline,
-                    verdict)
+from ._html import (
+    duration,
+    fmt,
+    layer_html,
+    legend,
+    loss_chart,
+    page,
+    plural,
+    share,
+    table,
+    tag,
+    timeline,
+    verdict,
+)
 from .facts import COMMON, DISPLAY_SEVERITY, RunFacts, Stuck
 
 GROUPABLE = ("alarm", "alarm_cleared", "channels_cleared")
@@ -327,7 +339,7 @@ def _refused_section(f: RunFacts) -> str:
 def _layer_rows(f: RunFacts) -> list[list[str]]:
     names: list[str] = []
     for m in f.metrics:
-        for k in list((m.get("grad") or {})) + list((m.get("stuck") or {})):
+        for k in list(m.get("grad") or {}) + list(m.get("stuck") or {}):
             if k not in names:
                 names.append(k)
     for e in f.events:

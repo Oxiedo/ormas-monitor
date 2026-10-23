@@ -2,7 +2,7 @@
 for good, optionally repair it, and keep a tamper-evident record. Runs entirely on your machine."""
 __version__ = "0.2.0"
 
-from .config import MonitorConfig  # noqa: E402
-from .monitor import Monitor  # noqa: E402
+from .config import MonitorConfig
+from .monitor import Monitor
 
 __all__ = ["Monitor", "MonitorConfig", "__version__"]
