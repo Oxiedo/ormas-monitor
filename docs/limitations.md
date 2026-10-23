@@ -30,7 +30,7 @@ Stated in one place so they do not drift.
 
 ## Hardware and scale
 
-- **All measured numbers come from one Apple-silicon Mac** on CIFAR-10, with one seed. **Not yet tested on NVIDIA/Linux, multi-GPU or at scale.** A GPU stress test is planned.
+- **All measured numbers come from one Apple-silicon Mac** on CIFAR-10, with one seed. The test suite runs automatically on Linux, macOS and Windows (CPU, Python 3.9 and 3.12), but the tool is **not yet tested on NVIDIA GPUs, multi-GPU or at scale.** A GPU stress test is planned.
 - **Distributed support (DDP/FSDP) is covered by two-process CPU tests on Linux and macOS only (not Windows).** Status: OPEN.
 - **Overhead on large models is not measured.**
 

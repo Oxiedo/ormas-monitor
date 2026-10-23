@@ -17,7 +17,7 @@ Everything runs on your machine. The core makes no network calls and never reads
 - **A signed record of what happened in training,** plus a one-page summary for non-engineers.
 - **Nothing to trust us with:** open source, local, never reads your data.
 
-More detail: [Why use it](https://github.com/Oxiedo/ormas-monitor/blob/main/docs/why.md).
+See it end to end: [five-minute tutorial with real output](https://github.com/Oxiedo/ormas-monitor/blob/main/docs/tutorial.md). More detail: [Why use it](https://github.com/Oxiedo/ormas-monitor/blob/main/docs/why.md).
 
 ## Three ways in
 

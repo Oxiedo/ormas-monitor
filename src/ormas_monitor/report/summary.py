@@ -24,8 +24,8 @@ NOT_TOLD = (
     "Proofs that a part of the model is dead apply only to one common building block "
     "(convolution or linear layer, then batch normalisation, then ReLU). Transformers and large "
     "language models get warnings only, never proofs.",
-    "The tool has so far been tested on one Apple-silicon Mac, not yet on NVIDIA/Linux, multiple GPUs "
-    "or at large scale.",
+    "The tool is tested automatically on Linux, macOS and Windows, but not yet on NVIDIA GPUs, multiple "
+    "GPUs or at large scale; its measured results come from one Apple-silicon Mac.",
 )
 
 GLOSSARY = {

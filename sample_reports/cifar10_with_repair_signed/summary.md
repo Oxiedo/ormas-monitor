@@ -29,7 +29,7 @@ Yes: all 37 entries of the record check out and the record is signed by the key 
 - It does not measure how accurate or fit for purpose the model is. A run with no problems found can still produce a poor model.
 - It never reads the training data, so it cannot find mislabelled or harmful examples.
 - Proofs that a part of the model is dead apply only to one common building block (convolution or linear layer, then batch normalisation, then ReLU). Transformers and large language models get warnings only, never proofs.
-- The tool has so far been tested on one Apple-silicon Mac, not yet on NVIDIA/Linux, multiple GPUs or at large scale.
+- The tool is tested automatically on Linux, macOS and Windows, but not yet on NVIDIA GPUs, multiple GPUs or at large scale; its measured results come from one Apple-silicon Mac.
 
 ## Words used here
 
