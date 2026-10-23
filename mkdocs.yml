@@ -54,6 +54,7 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Quickstart: quickstart.md
+  - Why use it: why.md
   - Concepts:
       - Dead channels and the certificate: concepts/dead-channels.md
       - Alarms against each layer's own baseline: concepts/alarms.md
