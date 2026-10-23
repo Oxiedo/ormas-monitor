@@ -138,7 +138,7 @@ The demo trains the paper's CIFAR-10 CNN, zeroes two of its three conv layers an
 
 Pass `--data DIR` to point at an existing CIFAR-10 folder (default `data/`), and `--out DIR` to choose where the two runs are written (default `ormas_demo/`; re-running the demo replaces them). The quick demo took about 50 s on the reference Mac with CIFAR-10 already downloaded.
 
-Or skip the demo and open the real reports in [`sample_reports/`](https://github.com/OWNER/ormas-monitor/tree/main/sample_reports).
+Or skip the demo and open the real reports in [`sample_reports/`](https://github.com/Oxiedo/ormas-monitor/tree/main/sample_reports).
 
 ## Install extras
 

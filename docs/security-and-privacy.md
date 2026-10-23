@@ -41,4 +41,4 @@ Signing keys: `keygen` writes the private key unencrypted with mode `0600` and n
 
 ## Reporting a vulnerability
 
-Email **raadh@oxiedo.com** with "SECURITY" in the subject. Please do not open a public issue for a security problem. See [`SECURITY.md`](https://github.com/OWNER/ormas-monitor/blob/main/SECURITY.md) for what to include and what to expect.
+Email **raadh@oxiedo.com** with "SECURITY" in the subject. Please do not open a public issue for a security problem. See [`SECURITY.md`](https://github.com/Oxiedo/ormas-monitor/blob/main/SECURITY.md) for what to include and what to expect.

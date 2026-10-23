@@ -2,9 +2,9 @@
 
 **Catch the layer that breaks while your model trains, and get proof.**
 
-[![CI](https://github.com/OWNER/ormas-monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/ormas-monitor/actions/workflows/ci.yml)
+[![CI](https://github.com/Oxiedo/ormas-monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/Oxiedo/ormas-monitor/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/ormas-monitor.svg)](https://pypi.org/project/ormas-monitor/)
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://github.com/Oxiedo/ormas-monitor/blob/main/LICENSE)
 
 `ormas-monitor` watches a PyTorch training run layer by layer. Each layer is compared with **its own** history, so the monitor names the layer that failed. When a channel can never recover, it says so with a **certificate**, not a guess. It can repair those channels if you ask, and it writes a tamper-evident record of everything it saw.
 
@@ -17,7 +17,7 @@ Everything runs on your machine. The core makes no network calls and never reads
 - **A signed record of what happened in training,** plus a one-page summary for non-engineers.
 - **Nothing to trust us with:** open source, local, never reads your data.
 
-More detail: [Why use it](docs/why.md).
+More detail: [Why use it](https://github.com/Oxiedo/ormas-monitor/blob/main/docs/why.md).
 
 ## Three ways in
 
@@ -47,7 +47,7 @@ mon.close()                            # writes the record and reports to ormas_
 
 A new `Monitor` refuses to overwrite an existing record in its run directory (`FileExistsError`); pass another `out=` or `overwrite=True`.
 
-Using Lightning or the Hugging Face `Trainer`? Add one callback instead, `ormas_monitor.integrations.lightning.OrmasMonitorCallback` or `ormas_monitor.integrations.huggingface.OrmasMonitorCallback`: see [Lightning](docs/guides/lightning.md) and [Hugging Face](docs/guides/huggingface.md).
+Using Lightning or the Hugging Face `Trainer`? Add one callback instead, `ormas_monitor.integrations.lightning.OrmasMonitorCallback` or `ormas_monitor.integrations.huggingface.OrmasMonitorCallback`: see [Lightning](https://github.com/Oxiedo/ormas-monitor/blob/main/docs/guides/lightning.md) and [Hugging Face](https://github.com/Oxiedo/ormas-monitor/blob/main/docs/guides/huggingface.md).
 
 **3. Watch it catch a broken layer (about a minute on an Apple M-series Mac, after the download)**
 
@@ -56,7 +56,7 @@ pip install "ormas-monitor[demo]"
 ormas-monitor demo        # CIFAR-10: two layers are zeroed; watch-only vs repair (downloads CIFAR-10 once)
 ```
 
-Or open the real reports without installing anything: [`sample_reports/`](sample_reports).
+Or open the real reports without installing anything: [`sample_reports/`](https://github.com/Oxiedo/ormas-monitor/tree/main/sample_reports).
 
 ## What it found (verified)
 
@@ -70,11 +70,11 @@ All numbers: one seed (0), one Apple M-series Mac (training on its GPU via MPS, 
 | `check` on torchvision ImageNet models | **19 of 21** BN→ReLU models carry channels decayed to ~0; DenseNet-169: 7,667 of 77,536 (9.9%) |
 | The paper's own StandardCNN | 160 of 256 classifier hidden units never fire on any of the 10,000 test images |
 
-Details and exact reproduce commands: [docs/results.md](docs/results.md).
+Details and exact reproduce commands: [docs/results.md](https://github.com/Oxiedo/ormas-monitor/blob/main/docs/results.md).
 
 ## The certificate, in one paragraph
 
-In a Conv/Linear → BatchNorm → ReLU channel, if the incoming filter or the BatchNorm scale is exactly zero and the BatchNorm shift is ≤ 0, the ReLU is closed for every input. Every gradient into the channel is then exactly zero, so SGD or AdamW can never revive it (Theorem 2 of the DeepMath 2026 paper below). The monitor issues the certificate only when, checked at run time: the BatchNorm reads the layer's output and a ReLU module is its only consumer (from the autograd graph of the first sampled step); the channel's gradient is exactly zero at that check; the optimizer is SGD or one of the Adam family, holds no momentum for the channel, and its weight decay cannot lift the shift above zero; and BatchNorm is in training mode. Otherwise it records why it refused. [Conditions and known gaps](docs/concepts/dead-channels.md).
+In a Conv/Linear → BatchNorm → ReLU channel, if the incoming filter or the BatchNorm scale is exactly zero and the BatchNorm shift is ≤ 0, the ReLU is closed for every input. Every gradient into the channel is then exactly zero, so SGD or AdamW can never revive it (Theorem 2 of the DeepMath 2026 paper below). The monitor issues the certificate only when, checked at run time: the BatchNorm reads the layer's output and a ReLU module is its only consumer (from the autograd graph of the first sampled step); the channel's gradient is exactly zero at that check; the optimizer is SGD or one of the Adam family, holds no momentum for the channel, and its weight decay cannot lift the shift above zero; and BatchNorm is in training mode. Otherwise it records why it refused. [Conditions and known gaps](https://github.com/Oxiedo/ormas-monitor/blob/main/docs/concepts/dead-channels.md).
 
 ## What it is not
 
@@ -86,7 +86,7 @@ In a Conv/Linear → BatchNorm → ReLU channel, if the incoming filter or the B
 - **Not the first to notice dead units.** ReDo (Sokar et al., ICML 2023) and network slimming came first. We claim the certificate and the packaging.
 - **Not yet tested on NVIDIA/Linux, multi-GPU or at scale.**
 
-Full list: [docs/limitations.md](docs/limitations.md).
+Full list: [docs/limitations.md](https://github.com/Oxiedo/ormas-monitor/blob/main/docs/limitations.md).
 
 ## Install
 
@@ -105,9 +105,9 @@ Python 3.9+, PyTorch 2.3+ (declared). Run so far on Python 3.13 with PyTorch 2.1
 
 ## Documentation
 
-[Quickstart](docs/quickstart.md) · [Concepts](docs/concepts/dead-channels.md) · [Guides](docs/guides/pytorch.md) · [CLI reference](docs/reference/cli.md) · [Python API](docs/reference/python-api.md) · [For leaders](docs/for-leaders.md) · [Security and privacy](docs/security-and-privacy.md) · [FAQ](docs/faq.md)
+[Quickstart](https://github.com/Oxiedo/ormas-monitor/blob/main/docs/quickstart.md) · [Concepts](https://github.com/Oxiedo/ormas-monitor/blob/main/docs/concepts/dead-channels.md) · [Guides](https://github.com/Oxiedo/ormas-monitor/blob/main/docs/guides/pytorch.md) · [CLI reference](https://github.com/Oxiedo/ormas-monitor/blob/main/docs/reference/cli.md) · [Python API](https://github.com/Oxiedo/ormas-monitor/blob/main/docs/reference/python-api.md) · [For leaders](https://github.com/Oxiedo/ormas-monitor/blob/main/docs/for-leaders.md) · [Security and privacy](https://github.com/Oxiedo/ormas-monitor/blob/main/docs/security-and-privacy.md) · [FAQ](https://github.com/Oxiedo/ormas-monitor/blob/main/docs/faq.md)
 
-Hosted: https://OWNER.github.io/ormas-monitor/
+Hosted: https://oxiedo.github.io/ormas-monitor/
 
 ## Citation
 
@@ -126,6 +126,6 @@ If you use the dead-channel certificate, please cite the paper ([`CITATION.cff`]
 
 ## Contact
 
-Built by Rokib Al Dhin Raadh at [Oxiedo](https://oxiedo.com). Questions, bugs, or a run you'd like a second pair of eyes on: raadh@oxiedo.com. Security issues: see [SECURITY.md](SECURITY.md).
+Built by Rokib Al Dhin Raadh at [Oxiedo](https://oxiedo.com). Questions, bugs, or a run you'd like a second pair of eyes on: raadh@oxiedo.com. Security issues: see [SECURITY.md](https://github.com/Oxiedo/ormas-monitor/blob/main/SECURITY.md).
 
-Licensed under [Apache-2.0](LICENSE).
+Licensed under [Apache-2.0](https://github.com/Oxiedo/ormas-monitor/blob/main/LICENSE).

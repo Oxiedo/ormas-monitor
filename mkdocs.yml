@@ -1,8 +1,8 @@
 site_name: ormas-monitor
 site_description: Catch the layer that breaks while your PyTorch model trains, and get proof.
 site_author: Rokib Al Dhin Raadh (Oxiedo)
-site_url: https://OWNER.github.io/ormas-monitor/
-repo_url: https://github.com/OWNER/ormas-monitor
+site_url: https://oxiedo.github.io/ormas-monitor/
+repo_url: https://github.com/Oxiedo/ormas-monitor
 repo_name: ormas-monitor
 edit_uri: edit/main/docs/
 copyright: Copyright 2026 Oxiedo · Apache-2.0

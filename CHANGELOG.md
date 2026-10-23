@@ -72,5 +72,5 @@ First release.
 - `ormas-monitor demo`: the CIFAR-10 dead-layer experiment, watch-only vs repair.
 - Examples: full demo, overhead measurement, torchvision scan.
 
-[Unreleased]: https://github.com/OWNER/ormas-monitor/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/OWNER/ormas-monitor/releases/tag/v0.1.0
+[Unreleased]: https://github.com/Oxiedo/ormas-monitor/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/Oxiedo/ormas-monitor/releases/tag/v0.1.0

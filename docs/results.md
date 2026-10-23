@@ -1,6 +1,6 @@
 # Results
 
-Every number on this page was measured on **one Apple M-series Mac**: training results with seed 0 on its GPU (MPS), torch 2.11 and the default monitor settings, checkpoint timings on one run. None has been measured on NVIDIA/Linux, multi-GPU or at scale. The real reports are in [`sample_reports/`](https://github.com/OWNER/ormas-monitor/tree/main/sample_reports).
+Every number on this page was measured on **one Apple M-series Mac**: training results with seed 0 on its GPU (MPS), torch 2.11 and the default monitor settings, checkpoint timings on one run. None has been measured on NVIDIA/Linux, multi-GPU or at scale. The real reports are in [`sample_reports/`](https://github.com/Oxiedo/ormas-monitor/tree/main/sample_reports).
 
 ## 1. The dead-layer experiment
 
@@ -62,7 +62,7 @@ The checks run only on sampled steps, so `check_every` trades detail for speed. 
 | densenet121 | 40,800 | 2,242 (5.5%) |
 | densenet169 | 77,536 | 7,667 (9.9%) |
 
-The full table for all 22 models is in [`scan_results/scan.md`](https://github.com/OWNER/ormas-monitor/blob/main/scan_results/scan.md).
+The full table for all 22 models is in [`scan_results/scan.md`](https://github.com/Oxiedo/ormas-monitor/blob/main/scan_results/scan.md).
 
 On 64 real images (CIFAR-10 test images upscaled to 224 px), these channels output **exactly 0** in ResNet-18, VGG-19-BN and MnasNet, and at most 1.5 × 10⁻⁶ in DenseNet-169.
 

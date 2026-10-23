@@ -20,3 +20,6 @@ ormas_run/
 
 # signing keys: never commit a private key (force-add a public key if you want it in the repo)
 *.pem
+
+# public verification keys for the signed samples are meant to be shared
+!sample_reports/**/*.pub.pem

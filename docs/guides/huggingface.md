@@ -77,4 +77,4 @@ For a large model, restrict the monitor to the layers you care about with `layer
 ormas-monitor check ./my-finetuned-model --against ./base-model --arch hf
 ```
 
-A runnable training example is in [`examples/integrations/huggingface_example.py`](https://github.com/OWNER/ormas-monitor/blob/main/examples/integrations/huggingface_example.py).
+A runnable training example is in [`examples/integrations/huggingface_example.py`](https://github.com/Oxiedo/ormas-monitor/blob/main/examples/integrations/huggingface_example.py).

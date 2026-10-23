@@ -27,7 +27,7 @@ Channels that output nothing still cost compute on every forward pass, in traini
 
 **They really are dead weight.** We switched off every flagged channel and ran each model on 256 real photos (CIFAR-10 test images upscaled to 224 px). The logits did not change at all: maximum change 0.0, and the same top-1 answer on 100% of images. This held for ResNet-18, ResNet-50, VGG-19-BN, DenseNet-169, MnasNet-1.0 and MobileNet-V2.
 
-As a control, we switched off the *same number* of randomly chosen live channels in ResNet-18, VGG-19-BN and MnasNet (128 images). The answers changed on 98–100% of images. Reproduce with `python examples/reproduce/zero_flagged_channels.py --data DIR`.
+As a control, we switched off the *same number* of randomly chosen live channels in ResNet-18, VGG-19-BN and MnasNet (128 images). The answers changed on 98–100% of images. Reproduce with `python examples/reproduce/zero_flagged_channels.py --data DIR`; add `--images 128 --control` for the control.
 
 This shows the flagged channels can be removed without changing the model's outputs on these images. We have not removed them structurally, so speed and memory savings are **not measured**. They depend on your pruning tool and hardware.
 

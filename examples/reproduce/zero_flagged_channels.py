@@ -8,10 +8,12 @@ This measures whether the channels can be removed without changing outputs. It d
 structurally, so it does not measure speed or memory savings.
 
 Run:  python examples/reproduce/zero_flagged_channels.py --data DIR [--images 256]   (needs torchvision)
+      add --control to switch off the same number of random live channels instead
 """
 from __future__ import annotations
 
 import argparse
+import random
 
 import torch
 import torch.nn.functional as F
@@ -42,6 +44,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default="data")
     ap.add_argument("--images", type=int, default=256)
+    ap.add_argument("--control", action="store_true",
+                    help="switch off the same number of random LIVE channels instead (should change outputs)")
     a = ap.parse_args()
     x = images(a.data, a.images)
     for name in MODELS:
@@ -49,6 +53,10 @@ def main() -> None:
         follow = relu_followers(model, x[:1])
         res = check(model.state_dict(), relu_after=follow)
         flagged = {l["batchnorm"]: l["decayed"] for l in res["layers"] if l.get("decayed")}
+        if a.control:
+            rng, mods = random.Random(0), dict(model.named_modules())
+            flagged = {b: rng.sample([i for i in range(mods[b].num_features) if i not in set(c)], len(c))
+                       for b, c in flagged.items()}
         total = sum(l["channels"] for l in res["layers"] if l["batchnorm"] in follow)
         before = logits(model, x)
         modules = dict(model.named_modules())

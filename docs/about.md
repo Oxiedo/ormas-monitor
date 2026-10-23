@@ -28,4 +28,4 @@ Dead and dormant units are well studied. ReDo (Sokar et al., *The Dormant Neuron
 
 ## Citing
 
-See [`CITATION.cff`](https://github.com/OWNER/ormas-monitor/blob/main/CITATION.cff).
+See [`CITATION.cff`](https://github.com/Oxiedo/ormas-monitor/blob/main/CITATION.cff).

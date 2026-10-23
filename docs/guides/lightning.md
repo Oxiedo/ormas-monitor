@@ -52,4 +52,4 @@ If the run directory already holds a record (for example when `trainer.log_dir` 
 - **Multiple GPUs:** see [Distributed training](distributed.md). The callback has been tested on CPU only, not under DDP or on CUDA. **Status: OPEN.**
 - **`to_loggers=True` with W&B** sends data to W&B. See [Sinks](sinks.md).
 
-A runnable example is in [`examples/integrations/lightning_example.py`](https://github.com/OWNER/ormas-monitor/blob/main/examples/integrations/lightning_example.py).
+A runnable example is in [`examples/integrations/lightning_example.py`](https://github.com/Oxiedo/ormas-monitor/blob/main/examples/integrations/lightning_example.py).

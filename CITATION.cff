@@ -14,7 +14,7 @@ authors:
     orcid: "https://orcid.org/0009-0003-1178-5296"
 license: Apache-2.0
 version: "0.2.0"   # keep in step with ormas_monitor.__version__
-repository-code: "https://github.com/OWNER/ormas-monitor"
+repository-code: "https://github.com/Oxiedo/ormas-monitor"
 url: "https://oxiedo.com"
 keywords:
   - pytorch

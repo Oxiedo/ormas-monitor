@@ -50,7 +50,7 @@ Declared: Python 3.9 and later, PyTorch 2.3 and later. Run so far on Python 3.13
 
 ### How do I cite it?
 
-See [`CITATION.cff`](https://github.com/OWNER/ormas-monitor/blob/main/CITATION.cff) or the citation in the [README](https://github.com/OWNER/ormas-monitor#citation).
+See [`CITATION.cff`](https://github.com/Oxiedo/ormas-monitor/blob/main/CITATION.cff) or the citation in the [README](https://github.com/Oxiedo/ormas-monitor#citation).
 
 ### Where do I get help?
 

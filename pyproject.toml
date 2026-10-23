@@ -64,10 +64,10 @@ dev = [
 
 [project.urls]
 Homepage = "https://oxiedo.com"
-Documentation = "https://OWNER.github.io/ormas-monitor/"
-Source = "https://github.com/OWNER/ormas-monitor"
-Issues = "https://github.com/OWNER/ormas-monitor/issues"
-Changelog = "https://github.com/OWNER/ormas-monitor/blob/main/CHANGELOG.md"
+Documentation = "https://oxiedo.github.io/ormas-monitor/"
+Source = "https://github.com/Oxiedo/ormas-monitor"
+Issues = "https://github.com/Oxiedo/ormas-monitor/issues"
+Changelog = "https://github.com/Oxiedo/ormas-monitor/blob/main/CHANGELOG.md"
 
 [project.scripts]
 ormas-monitor = "ormas_monitor.cli:main"

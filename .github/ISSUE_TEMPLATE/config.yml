@@ -1,7 +1,7 @@
 blank_issues_enabled: false
 contact_links:
   - name: Security vulnerability
-    url: https://github.com/OWNER/ormas-monitor/blob/main/SECURITY.md
+    url: https://github.com/Oxiedo/ormas-monitor/blob/main/SECURITY.md
     about: Please report security problems by email, not in a public issue.
   - name: Questions and help reading a report
     url: mailto:raadh@oxiedo.com

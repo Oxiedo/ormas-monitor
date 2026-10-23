@@ -5,7 +5,7 @@ Thank you for helping. Bug reports, "a finding looks wrong" reports, docs fixes 
 ## Development setup
 
 ```bash
-git clone https://github.com/OWNER/ormas-monitor
+git clone https://github.com/Oxiedo/ormas-monitor
 cd ormas-monitor
 python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
@@ -61,7 +61,7 @@ If `check` or the monitor reports something you believe is incorrect, open an is
 
 One-time setup, before the first release:
 
-- **PyPI Trusted Publishing.** On pypi.org, under *Your account → Publishing → Add a new pending publisher*, enter: PyPI project name `ormas-monitor`, owner `OWNER`, repository `ormas-monitor`, workflow `release.yml`, environment `pypi`. No API token is created or stored.
+- **PyPI Trusted Publishing.** On pypi.org, under *Your account → Publishing → Add a new pending publisher*, enter: PyPI project name `ormas-monitor`, owner `Oxiedo`, repository `ormas-monitor`, workflow `release.yml`, environment `pypi`. No API token is created or stored.
 - **GitHub environment.** In the repository, *Settings → Environments → New environment* named `pypi`. Optionally require a reviewer, so every publish needs a click.
 - **GitHub Pages.** *Settings → Pages → Source: GitHub Actions*, so `docs.yml` can deploy the site.
 
