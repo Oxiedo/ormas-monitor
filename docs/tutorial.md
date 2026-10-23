@@ -1,14 +1,14 @@
 # Tutorial: five minutes, start to finish
 
-This is a real session: a fresh Python environment, install from GitHub, and every command below run as shown. The output is pasted unedited, apart from the hash fingerprints. Your numbers will differ slightly with your hardware and torch version.
+This is a real session: a fresh Python environment, install, and every command below run as shown. The output is pasted unedited, apart from the hash fingerprints. Your numbers will differ slightly with your hardware and torch version.
 
 ## 1. Install
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install "ormas-monitor[safetensors,signing,demo] @ git+https://github.com/Oxiedo/ormas-monitor"
+pip install "ormas-monitor[safetensors,signing,demo]"
 ormas-monitor --version
-# ormas-monitor 0.2.0
+# ormas-monitor 0.2.1
 ```
 
 ## 2. Check a model file you already have
