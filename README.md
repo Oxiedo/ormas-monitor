@@ -111,7 +111,7 @@ Hosted: https://oxiedo.github.io/ormas-monitor/
 
 ## Citation
 
-If you use the dead-channel certificate, please cite the paper ([`CITATION.cff`](CITATION.cff)):
+If you use the dead-channel certificate, please cite the paper ([`CITATION.cff`](https://github.com/Oxiedo/ormas-monitor/blob/main/CITATION.cff)):
 
 ```bibtex
 @inproceedings{raadh2026selfrepair,
