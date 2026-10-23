@@ -31,13 +31,13 @@ The record contains layer names, step numbers, gradient norms, channel indices, 
 
 The hash chain makes unnoticed edits hard; a seal pins the file contents and length; an Ed25519 signature by a key the training machine does not hold makes unauthorised edits detectable. None of them proves the training happened as described. The full table is in [The training record](concepts/record.md#threat-model).
 
-Signing keys: `keygen` writes the private key unencrypted with mode `0600` and never overwrites. Keep it off the training machine where you can, out of the run directory, and out of version control.
+Signing keys: `keygen` writes the private key unencrypted with mode `0600` and never overwrites or writes through a symbolic link. `sign` refuses symlinked record files and never writes through a link. `verify` treats a record as untrusted input: malformed lines, hostile seal values and symlinked files fail a check instead of crashing it. Keep the private key off the training machine where you can, out of the run directory, and out of version control.
 
 ## Supply chain
 
 - The core depends only on PyTorch.
 - Every optional dependency is behind an extra and imported only when used.
-- Releases are built in GitHub Actions and published to PyPI with Trusted Publishing (OIDC): no long-lived PyPI token exists.
+- The release workflow is set up to build in GitHub Actions and publish to PyPI with Trusted Publishing (OIDC), so no long-lived PyPI token is needed. No release has been published through it yet. **Status: OPEN.**
 
 ## Reporting a vulnerability
 

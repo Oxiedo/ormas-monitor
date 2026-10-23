@@ -4,19 +4,19 @@
 
 ## What it is
 
-`ormas-monitor` is a free, open-source (Apache-2.0) tool that your engineers add to a PyTorch training run with two lines of code or one callback. While the model trains, it watches each layer of the network against that layer's own normal behaviour, names the layer that failed, and, for one common kind of network, proves when part of the model has died and can never recover. It can optionally repair that part. It writes a tamper-evident record of what it saw, and a plain-language summary for you. It runs on your own machines and sends nothing anywhere unless your team configures it to.
+`ormas-monitor` is a free, open-source (Apache-2.0) tool that your engineers add to a PyTorch training run with two lines of code or one callback. While the model trains, it watches each layer of the network against that layer's own normal behaviour, names the layer that failed, and, for one common kind of network, proves when part of the model has died and can never recover. It can optionally repair that part. It writes a tamper-evident record of what it saw, and a plain-language summary for you. It runs on your own machines and sends nothing anywhere unless your team configures it to (the optional demo downloads a public dataset once).
 
 ## Why it matters
 
-A training run can fail silently: the loss curve still moves, but part of the model has stopped learning. That capacity is paid for in compute and delivers nothing. In our CIFAR-10 demonstration, after two layers of a trained network were broken, the run with the monitor only watching sat at chance accuracy (10.00%) for all 12 remaining epochs, while the run with repair recovered to 76.77% (healthy: 78.84%). That is one seed on one Apple-silicon Mac, a small model and a deliberately broken network. It shows the mechanism, not what to expect on your models.
+A training run can fail silently: the loss curve still moves, but part of the model has stopped learning. That capacity is paid for in compute and delivers nothing. In our CIFAR-10 demonstration, after two layers of a trained network were broken, the run with the monitor only watching sat at chance accuracy (10.00%) for all 12 remaining epochs, while the run with repair recovered to 76.77% (healthy: 78.84%). That is one seed on one Apple-silicon Mac, a small model and a deliberately broken network; exact percentages shift with software version and hardware. It shows the mechanism, not what to expect on your models.
 
 ## What the summary report tells you
 
 At the end of a run the monitor writes `summary.html` and `summary.md` next to the engineer report. One page, in plain language, under these headings:
 
-- **A one-line verdict**, for example "Problem found and repaired".
-- **What happened:** which layers had problems, when, and whether any part was *proven* dead rather than suspected.
-- **What it cost:** how many training steps, and how much wall-clock time, part of the model was stuck. This is counted from the first check that saw the problem, so it may have started up to one check interval earlier. A dollar figure appears only if your team supplies a GPU-hour price (`ormas-monitor report RUN --gpu-hour-cost PRICE --gpus N`); it is labelled **ESTIMATE** and shows its formula (stuck hours × GPUs × price). Without a price it prints no dollars. It never guesses one.
+- **A one-line verdict**, for example "Healthy", "Problem found and repaired" or "Problem, not repaired". If the monitor was wired in wrongly and never saw the model learn, it says **Not monitored** (or **Partly monitored**) instead of healthy; with no check at all, **Unknown**.
+- **What happened:** which layers had problems, when, and whether any part was *proven* dead rather than suspected. "Stuck" means the weights show a channel is dead, constant or shrunk to almost zero; "silent" means it gave no output on the batches checked, which is not proof and is reported separately.
+- **What it cost:** how many training steps, and how much wall-clock time, part of the model was stuck (silent channels are not counted). This is counted from the first check that saw the problem, so it may have started up to one check interval earlier. A dollar figure appears only if your team supplies a GPU-hour price (`ormas-monitor report RUN --gpu-hour-cost PRICE --gpus N`); it is labelled **ESTIMATE** and shows its formula (stuck hours × GPUs × price). Without a price it prints no dollars. It never guesses one.
 - **What was done:** what was repaired, where and when.
 - **Can you trust this record?** Whether the record verifies, and whether it is signed and by which key.
 - **What this report does not tell you:** the same limits as on this page.

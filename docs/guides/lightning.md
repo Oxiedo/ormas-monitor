@@ -39,7 +39,11 @@ The loss the monitor sees is the objective whose gradient is in `.grad`: with ac
 | `**monitor_kwargs` | | Passed to `Monitor`: `repair`, `check_every`, `sinks`, `config`, `name`, ... |
 | `out` | `<trainer.log_dir>/ormas_run` | The run directory, as for `Monitor`. |
 
-After `fit`, `callback.monitor` is the closed monitor (with `counts`) and `callback.report` is the report path.
+After `fit`, `callback.monitor` is the closed monitor (with `counts`) and `callback.report` is the report path. Closing never raises: a failure is logged and kept in `callback.close_error`, so it cannot replace your own training exception.
+
+If the chosen optimizer holds no torch optimizer over the module's own parameters (DeepSpeed, custom wrappers), the monitor runs without it: one line says so, repair and the scaler are dropped, and no certificate is issued; alarms and the record still work.
+
+If the run directory already holds a record (for example when `trainer.log_dir` is reused), creating the monitor raises `FileExistsError`; pass `overwrite=True` or another `out`.
 
 ## Notes
 

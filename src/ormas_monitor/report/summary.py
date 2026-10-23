@@ -44,7 +44,7 @@ GLOSSARY = {
     "record": ("Tamper-evident record", "The log of everything the monitor saw. Each line carries a "
                                         "fingerprint of the line before it, so edits show."),
     "signature": ("Signature", "A digital seal made with a private key. It shows who vouched for the "
-                               "record and detects a record rewritten from scratch."),
+                               "record and detects a record rewritten from scratch by anyone who does not hold the private key."),
 }
 
 

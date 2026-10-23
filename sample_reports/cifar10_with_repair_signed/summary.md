@@ -41,7 +41,7 @@ Yes: all 37 entries of the record check out and the record is signed by the key 
 - **Warning (alarm)**: A layer's learning signal moved far outside that layer's own normal range.
 - **Repair**: Resetting stuck channels to fresh starting values so training can use them again. Only happens if switched on.
 - **Tamper-evident record**: The log of everything the monitor saw. Each line carries a fingerprint of the line before it, so edits show.
-- **Signature**: A digital seal made with a private key. It shows who vouched for the record and detects a record rewritten from scratch.
+- **Signature**: A digital seal made with a private key. It shows who vouched for the record and detects a record rewritten from scratch by anyone who does not hold the private key.
 
 Technical detail: `report.html` (engineer report) and the record itself, `diary.jsonl`.
 Generated on this machine by ormas-monitor; nothing was uploaded.

@@ -30,13 +30,16 @@ assert line["hash"] == hashlib.sha256(
 | Event | Required fields beyond the common ones | Fixed values |
 |---|---|---|
 | `run_start` | `name, tool, model, parameters, layers, architecture_sha256, optimizer, python, torch, platform, config, record_version` | |
-| `structure` | `step, pairs, relu_after` | |
+| `structure` | `step, pairs, relu_after` (also `graph`: where the autograd walk started, `"loss"`, `"model outputs"` or `null`) | |
 | `manifest` | `step, check_every, layers, producers, channel_checks, repair, precision, distributed, notes` | |
 | `alarm` | `step, severity, layer, kind, diagnosis, grad_norm, baseline, sigma` | `severity = "warning"` |
 | `alarm_cleared` | `step, layer, diagnosis, grad_norm, baseline` | |
 | `channels` | `step, severity, layer, batchnorm, channels, level, n_certified, n_flat, n_observed, n_decayed, certified, flat, observed` | |
 | `channels_cleared` | same as `channels` | |
 | `certificate` | `step, severity, layer, batchnorm, channels, count, statement, assumes` | `severity = "proof"` |
+| `certificate_refused` | `step, severity, layer, batchnorm, count, reason` | `severity = "info"` |
+| `no_gradients` | `step, severity, message` | `severity = "warning"` |
+| `loss_reduced` | `step, severity, elements` | `severity = "info"` |
 | `repair` | `step, severity, layer, batchnorm, channels, count, method, optimizer_slices_reset, modification_class, bound, delta_norm, weight_norm_before, weight_norm_after, relative_change, rng` | `severity = "action"`, `modification_class = "discrete"`, `bound = null` |
 | `loss_spike` | `step, severity, value, baseline` | `severity = "warning"` |
 | `loss_recovered` | `step, value, baseline` | |
@@ -62,13 +65,16 @@ assert line["hash"] == hashlib.sha256(
 | `n_certified`, `n_flat`, `n_observed`, `n_decayed` | Counts of certified-dead, constant, silent and decayed channels. |
 | `certified`, `flat`, `observed` | The channel indices of each (truncated to `list_limit`). |
 | `statement`, `assumes` | The certificate's claim in words, and the assumptions it rests on. |
+| `reason`, `count` | In `certificate_refused`: why channels that look dead from their weights were not certified, and how many. Written once per layer and reason. |
+| `message` | In `no_gradients`: what to fix (written once per run; every such check is counted in `run_end.counts.checks_without_gradients`). |
+| `elements` | In `loss_reduced`: how many elements the loss passed to `step()` had; its mean was recorded. |
 | `method` | How the repair re-initialised the channels. |
 | `optimizer_slices_reset` | How many optimizer-state tensors had the repaired channels zeroed. |
 | `modification_class`, `bound` | Always `"discrete"` and `null`: repair is a jump with no enforced bound on its size. See [Repair](../concepts/repair.md#why-repair-is-a-discrete-modification). |
 | `delta_norm`, `weight_norm_before`, `weight_norm_after`, `relative_change` | The measured size of the repair: ‖ΔW‖, ‖W‖ before and after, and ‖ΔW‖ / ‖W‖ (`null` when ‖W‖ was 0). |
 | `rng` | Where the new weights came from: the global RNG, or a seeded generator. |
-| `pairs` | `{producer: batchnorm}` as learnt from the first forward pass. |
-| `relu_after` | The layers whose output a ReLU module consumes unmodified. |
+| `pairs` | `{producer: batchnorm}`, learnt from the dataflow of the first sampled step: the BatchNorm's input is the producer's unmodified output. |
+| `relu_after` | The layers whose output a ReLU module receives unmodified. Whether a layer may be certified (the ReLU being the only consumer, and the rest of the conditions) is in the `manifest` event's `producers`. |
 | `architecture_sha256` | SHA-256 of `name:shape` for every parameter, joined by `|`. Two runs with the same value have the same parameter names and shapes. |
 | `metrics_sha256` | SHA-256 of `metrics.jsonl` at the end of the run. |
 

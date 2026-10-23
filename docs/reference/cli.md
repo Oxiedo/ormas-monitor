@@ -21,12 +21,12 @@ ormas-monitor check [--against AGAINST] [--out OUT] [--json] [--arch ARCH] [--tr
 | `--against AGAINST` | An earlier checkpoint (file or folder). Adds which tensors changed most, which never moved, which were added, removed or reshaped, and which channels died in between. |
 | `--out OUT` | HTML report path. Default: `<file>.health.html`. |
 | `--json` | Print the full result as JSON on stdout (the summary then goes to stderr). |
-| `--arch ARCH` | Exact wiring: `torchvision:<name>` (e.g. `torchvision:resnet50`, needs torchvision), or `hf` to build the model from the folder's `config.json` (random weights, local files only, no download; tracing works for image models, others fall back and say why). Without it, dead-channel findings say "if a ReLU follows". |
+| `--arch ARCH` | Exact wiring: `torchvision:<name>` (e.g. `torchvision:resnet50`, needs torchvision), or `hf` to build the model from the folder's `config.json` (random weights, local files only, no download; tracing works for image models, others fall back and say why). Without it, dead-channel findings say "if a ReLU directly follows". The model is built once to trace it: about a second on the reference Mac, longer on the first run after installing torchvision. If under half of the file's BatchNorm layers are in the model (or of the model's in the file), the check stops with an error (exit `2`); a partial match adds an `arch_partial_match` warning. |
 | `--trust` | Allow loading files that contain pickled Python objects. **This can run code.** Use only for files whose origin you trust. |
 | `--fail-on` | Lowest severity that makes the exit code 1: `critical` (default), `warning` or `never`. |
 | `--quiet` | Print nothing except errors and `--json` output. |
 
-**Exit codes:** `0` no finding at or above `--fail-on`; `1` at least one; `2` the file could not be read or was refused.
+**Exit codes:** `0` no finding at or above `--fail-on`; `1` at least one; `2` the file could not be read or was refused, or `--arch` does not match it. Unless `--quiet`, the last line explains the code, e.g. `exit 0: no critical findings (1 warning; use --fail-on warning to fail on them)`.
 
 To measure time and memory on your machine: `python -m ormas_monitor.checkpoint.bench`. See [Results](../results.md#4-checkpoint-check-time-and-memory).
 
@@ -74,7 +74,7 @@ ormas-monitor demo [--out OUT] [--data DATA] [--full]
 
 | Option | Meaning |
 |---|---|
-| `--out OUT` | Where the two runs are written. Default `ormas_demo/` (`watch/` and `repair/`). |
+| `--out OUT` | Where the two runs are written. Default `ormas_demo/` (`watch/` and `repair/`). Re-running replaces them. |
 | `--data DATA` | Where CIFAR-10 is, or gets downloaded to. Default `data/`. |
 | `--full` | All 50,000 training images, 8 epochs before the lesion and 12 after. Default: 10,000 images, 4 + 4. |
 
@@ -96,7 +96,7 @@ Seal a finished run and sign the seal.
 ormas-monitor sign (--key PRIVATE.pem | --seal-only) run
 ```
 
-Writes `record.json` (the SHA-256 of `diary.jsonl` and `metrics.jsonl`, the diary head and length) and, with `--key`, `record.sig` (Ed25519 over the exact bytes of `record.json`). `--seal-only` writes the seal without a signature: a checksum, not proof of who sealed it. Refuses a run that does not verify. Exit `2` on refusal.
+Writes `record.json` (the SHA-256 of `diary.jsonl` and `metrics.jsonl`, the diary head and length) and, with `--key`, `record.sig` (Ed25519 over the exact bytes of `record.json`). `--seal-only` writes the seal without a signature: a checksum, not proof of who sealed it. Refuses a run that does not verify, and refuses to write through a symbolic link (`record.json`, `record.sig`) or to seal symlinked record files. Exit `2` on refusal.
 
 ## `diff`
 
@@ -113,4 +113,4 @@ ormas-monitor diff [--out diff.html] [--json] RUN_A RUN_B
 | `--out diff.html` | Also write an HTML diff report. |
 | `--json` | Print the diff result as JSON. |
 
-Uses the diaries and metrics only, never the weights. To compare weights, use `check --against`.
+Uses the diaries and metrics only, never the weights. Prints a verdict (integrity first, then the net per-layer result), a detail line, changed settings and a per-layer table; see [Comparing two runs](../concepts/record.md#comparing-two-runs). To compare weights, use `check --against`.

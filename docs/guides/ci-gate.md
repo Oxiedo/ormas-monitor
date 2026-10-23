@@ -12,6 +12,8 @@
 
 `--fail-on` takes `critical` (default), `warning` or `never`. `--quiet` prints nothing except errors and `--json` output.
 
+**For a CI gate, use `--fail-on warning`.** The default, `critical`, fails only on a broken file (NaN or Inf weights, missing shards); dead channels, decayed channels and channels that died since the baseline are warnings, so with the default the check prints them and still exits `0`. The last line of the output says why, for example `exit 0: no critical findings (2 warnings; use --fail-on warning to fail on them)`.
+
 ```bash
 ormas-monitor check model.safetensors --fail-on warning --quiet    # also fail on dead or decayed channels
 ```
@@ -52,7 +54,7 @@ The finding kinds are listed in the [findings catalogue](../reference/check-find
 ## Things to know
 
 - **Never pass `--trust` in CI on files from an untrusted source.** It allows pickle loading, which can run arbitrary code.
-- **Pass `--arch` when you know the architecture.** Without it, the check cannot see how layers are wired and qualifies dead-channel findings with "if a ReLU follows".
+- **Pass `--arch` when you know the architecture.** Without it, the check cannot see how layers are wired and qualifies dead-channel findings with "if a ReLU directly follows". A wrong `--arch` (under half of the file's BatchNorm layers found) fails with exit `2`. The first `--arch torchvision:` run after installing torchvision is slow while Python compiles it; later runs add about a second.
 - **Decayed channels are common in published models.** In our scan, 19 of 21 torchvision BN→ReLU models carried some. Failing on `warning` may be too strict for a model you did not train. Compare against a baseline with `--against` and gate on the `newly_dead` finding instead, for example with `--json` and a short script:
 
 ```bash

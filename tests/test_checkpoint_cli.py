@@ -114,5 +114,5 @@ def test_sequential_layer_names_are_readable(tmp_path, capsys):
     sd["4.bias"][:5] = -1
     torch.save(sd, tmp_path / "seq.pt")
     cli(["check", str(tmp_path / "seq.pt")])
-    assert ("[warning] 5 of 16 channels in layer `3` (Conv2d, BatchNorm `4`) are dead for good "
+    assert ("[warning] 5 of 16 channels in layer `3` (Conv2d, BatchNorm `4`) are dead (zero filter or scale, shift <= 0) "
             "if a ReLU directly follows `4`") in capsys.readouterr().out

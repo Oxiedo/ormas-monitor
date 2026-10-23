@@ -4,7 +4,7 @@ A global threshold on gradient norm does not work well: an embedding layer and a
 
 ## How a layer alarm fires
 
-Every `check_every` optimizer steps (default 50), the monitor reads each layer's gradient norm once, in a single device-to-host transfer. For each layer it keeps a running mean and variance of log₁₀(gradient norm).
+Every `check_every` optimizer steps (default 50), the monitor reads each layer's gradient norm once, in one device-to-host transfer per device that holds gradients. For each layer it keeps a running mean and variance of log₁₀(gradient norm).
 
 After `warmup` checks (default 8) have built the baseline, a check is *out of range* when the layer's log-gradient is
 
@@ -27,7 +27,11 @@ On every check the monitor also looks at the loss passed to `mon.step(loss)`:
 - **Non-finite loss or gradients** (NaN or Inf) raise a `critical` event, once per episode.
 - **Loss spikes:** the loss is more than `sigma` standard deviations above its running mean **and** more than 1.5× that mean. One `loss_spike` event per episode, followed by `loss_recovered`.
 
-Code that sees the loss in a different place from the optimizer step can call `mon.note_loss(loss)`; the next `step()` without a loss uses it. A loss passed to `step()` wins.
+Code that sees the loss in a different place from the optimizer step can call `mon.note_loss(loss)`; the next `step()` without a loss uses it. A loss passed to `step()` wins. A loss with more than one element (unreduced, per sample) is recorded as its mean, and one `loss_reduced` event says so.
+
+## No gradients
+
+If no watched layer has a gradient at a check, usually because `mon.step()` was called before `loss.backward()`, the monitor writes one `no_gradients` warning, counts every such check in `counts["checks_without_gradients"]`, and the reports say **NOT MONITORED** (no check saw gradients) or **PARTLY MONITORED** (some did not) instead of healthy. A run with no check at all is reported as **UNKNOWN**.
 
 ## Why the numbers are what they are
 

@@ -2,7 +2,7 @@
 
 These are real outputs of `ormas-monitor` 0.2. Open the `.html` files in a browser; nothing needs installing.
 
-They come from `ormas-monitor demo --full`: the paper's CIFAR-10 CNN trained for 8 epochs, then two of its three conv layers zeroed with the optimizer state cleared, then trained for 12 more epochs from that identical state. One seed, on an Apple M-series GPU.
+They come from `ormas-monitor demo --full`: the paper's CIFAR-10 CNN trained for 8 epochs, then two of its three conv layers zeroed with the optimizer state cleared, then trained for 12 more epochs from that identical state. One seed (0), on an Apple M-series GPU (MPS) with torch 2.11; exact percentages vary with torch version and hardware.
 
 | Folder or file | What it shows |
 |---|---|

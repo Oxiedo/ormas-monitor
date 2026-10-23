@@ -1041,7 +1041,7 @@ class Monitor:
                                       "so every gradient into these channels is exactly zero "
                                       "(Theorem 2, absorbing dead set)",
                             assumes=["ReLU follows", "BatchNorm in training mode",
-                                     "optimizer momentum for the channel has decayed",
+                                     "the optimizer holds no first-moment state for the channel",
                                      "the ReLU is the BatchNorm output's only consumer",
                                      "the channel's gradient is exactly zero at this check",
                                      "weight decay cannot lift the shift above zero"])

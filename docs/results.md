@@ -1,6 +1,6 @@
 # Results
 
-Every number on this page was measured on **one Apple M-series Mac**: training results with seed 0 on its GPU (MPS) and the default monitor settings, checkpoint timings on one run. None has been measured on NVIDIA/Linux, multi-GPU or at scale. The real reports are in [`sample_reports/`](https://github.com/OWNER/ormas-monitor/tree/main/sample_reports).
+Every number on this page was measured on **one Apple M-series Mac**: training results with seed 0 on its GPU (MPS), torch 2.11 and the default monitor settings, checkpoint timings on one run. None has been measured on NVIDIA/Linux, multi-GPU or at scale. The real reports are in [`sample_reports/`](https://github.com/OWNER/ormas-monitor/tree/main/sample_reports).
 
 ## 1. The dead-layer experiment
 
@@ -15,9 +15,11 @@ The experiment from the DeepMath 2026 poster:
 | **Full:** 50,000 images, 8 epochs, then 12 after the break | 78.84% | **10.00%** for all 12 epochs | **76.77%** (192 channels repaired) |
 | **Quick:** 10,000 images, 4 + 4 epochs | 61.76% | **10.00%** | **59.12%** (190 channels repaired) |
 
+The quick numbers were reproduced exactly with ormas-monitor 0.2.0 on 2026-10-23 (about 50 s, CIFAR-10 already downloaded).
+
 Test accuracy on the 10,000 CIFAR-10 test images. 10.00% is chance for 10 classes.
 
-- **Watch only:** within one check of the break, the monitor certified every channel of both layers as dead, then logged exactly zero gradient for every conv layer. The run then stayed at chance, as Theorem 2 says it must.
+- **Watch only:** at the first check after the break, the monitor certified every channel of both layers as dead in the full run (in the quick run, 62 of conv2's 64 channels; the other 2 had a positive shift and were reported constant), then logged exactly zero gradient for every conv layer. The run then stayed at chance, as Theorem 2 says it must.
 - **With repair:** the monitor re-initialised the proven-dead channels one check later and the network recovered, though not to full accuracy: the repaired channels start from scratch.
 
 **Reproduce:**
@@ -28,7 +30,7 @@ ormas-monitor demo --full --data DIR     # full; or: python examples/dead_layer_
 ormas-monitor demo --data DIR            # quick
 ```
 
-Expect different numbers on other hardware: results depend on the device's floating-point behaviour, even with a fixed seed.
+Expect different numbers on other hardware and other torch versions, even with a fixed seed: a fresh install that resolved torch 2.14.1 got 61.96% / 10.00% / 62.67% (191 repaired) on the quick demo. The qualitative result has held so far: watch-only stays at chance, repair recovers most of the accuracy.
 
 ## 2. Overhead
 

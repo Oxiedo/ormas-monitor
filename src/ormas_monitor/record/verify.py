@@ -119,7 +119,7 @@ def _clip(value: Any, limit: int = 60) -> str:
 
 
 def _short(h: Any) -> str:
-    return f"{_clip(h, 12)}..."
+    return _clip(h, 15)
 
 
 def _plain_name(name: Any) -> bool:

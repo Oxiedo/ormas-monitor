@@ -8,11 +8,11 @@
 
 `ormas-monitor` watches a PyTorch training run layer by layer. Each layer is compared with **its own** history, so the monitor names the layer that failed. When a channel can never recover, it says so with a **certificate**, not a guess. It can repair those channels if you ask, and it writes a tamper-evident record of everything it saw.
 
-Everything runs on your machine. The core makes no network calls and never reads your data.
+Everything runs on your machine. The core makes no network calls and never reads your data; only the demo downloads CIFAR-10, and only sinks you add (W&B, MLflow, a webhook) send anything.
 
 ## Three ways in
 
-**1. Check a saved model (about a minute, no code changes)**
+**1. Check a saved model (no code changes; a 98 MB ResNet-50 file takes under a second)**
 
 ```bash
 pip install "ormas-monitor[safetensors]"
@@ -26,19 +26,21 @@ ormas-monitor check model.pt --fail-on warning         # non-zero exit for a CI 
 ```python
 from ormas_monitor import Monitor
 
-mon = Monitor(model, optimizer)        # repair=True to re-initialise certified-dead channels
+mon = Monitor(model, optimizer)        # repair=True to re-initialise stuck channels
 for x, y in loader:
     loss = loss_fn(model(x), y)
     optimizer.zero_grad()
     loss.backward()
     mon.step(loss)                     # after backward, before optimizer.step()
     optimizer.step()
-mon.close()                            # writes ormas_run/report.html and the record
+mon.close()                            # writes the record and reports to ormas_run/
 ```
+
+A new `Monitor` refuses to overwrite an existing record in its run directory (`FileExistsError`); pass another `out=` or `overwrite=True`.
 
 Using Lightning or the Hugging Face `Trainer`? Add one callback instead, `ormas_monitor.integrations.lightning.OrmasMonitorCallback` or `ormas_monitor.integrations.huggingface.OrmasMonitorCallback`: see [Lightning](docs/guides/lightning.md) and [Hugging Face](docs/guides/huggingface.md).
 
-**3. Watch it catch a broken layer (about two minutes)**
+**3. Watch it catch a broken layer (about a minute on an Apple M-series Mac, after the download)**
 
 ```bash
 pip install "ormas-monitor[demo]"
@@ -49,7 +51,7 @@ Or open the real reports without installing anything: [`sample_reports/`](sample
 
 ## What it found (verified)
 
-All numbers: one seed (0), one Apple M-series Mac, CIFAR-10 unless stated. Not yet measured on NVIDIA/Linux, multi-GPU or at scale.
+All numbers: one seed (0), one Apple M-series Mac (training on its GPU via MPS, torch 2.11), CIFAR-10 unless stated. Exact accuracies vary with torch version and hardware (a fresh install with torch 2.14.1 got 61.96% / 10.00% / 62.67%, 191 repaired, on the quick demo); the qualitative result holds. Not yet measured on NVIDIA/Linux, multi-GPU or at scale.
 
 | Experiment | Result |
 |---|---|
@@ -63,7 +65,7 @@ Details and exact reproduce commands: [docs/results.md](docs/results.md).
 
 ## The certificate, in one paragraph
 
-In a Conv/Linear → BatchNorm → ReLU channel, if the incoming filter or the BatchNorm scale is exactly zero and the BatchNorm shift is ≤ 0, the ReLU is closed for every input. Every gradient into the channel is then exactly zero, so SGD or AdamW can never revive it (Theorem 2 of the DeepMath 2026 paper below). The monitor issues the certificate only when a ReLU directly consumes the layer's output, the optimizer holds no first-moment momentum for the channel, and BatchNorm is in training mode. [Read more](docs/concepts/dead-channels.md).
+In a Conv/Linear → BatchNorm → ReLU channel, if the incoming filter or the BatchNorm scale is exactly zero and the BatchNorm shift is ≤ 0, the ReLU is closed for every input. Every gradient into the channel is then exactly zero, so SGD or AdamW can never revive it (Theorem 2 of the DeepMath 2026 paper below). The monitor issues the certificate only when, checked at run time: the BatchNorm reads the layer's output and a ReLU module is its only consumer (from the autograd graph of the first sampled step); the channel's gradient is exactly zero at that check; the optimizer is SGD or one of the Adam family, holds no momentum for the channel, and its weight decay cannot lift the shift above zero; and BatchNorm is in training mode. Otherwise it records why it refused. [Conditions and known gaps](docs/concepts/dead-channels.md).
 
 ## What it is not
 
@@ -90,7 +92,7 @@ pip install "ormas-monitor[demo]"             # torchvision, for `ormas-monitor 
 pip install "ormas-monitor[all]"
 ```
 
-Python 3.9+, PyTorch 2.3+.
+Python 3.9+, PyTorch 2.3+ (declared). Run so far on Python 3.13 with PyTorch 2.11 (macOS); the CI matrix (Linux, macOS, Windows; Python 3.9 and 3.12; CPU) is set up but has not run yet. **Status: OPEN.**
 
 ## Documentation
 

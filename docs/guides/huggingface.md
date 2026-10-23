@@ -54,9 +54,11 @@ Trainer callbacks never receive the training loss. The callback reads the `loss`
 |---|---|---|
 | `to_loggers` | `False` | Also send metrics and events to the trackers in `args.report_to`: TensorBoard, W&B and MLflow. W&B and a remote MLflow send data off the machine. |
 | `write_report` | `True` | Write the reports when the monitor closes. |
+| `**monitor_kwargs` | | Passed to `Monitor`. `out` defaults to `<args.output_dir>/ormas_run`, `name` to `args.run_name`. Training twice into the same `output_dir` raises `FileExistsError` at `on_train_begin` unless you pass `overwrite=True` or another `out`. |
 
-`callback.note_loss(loss)` and `callback.close()` are public; `callback.monitor` is the `Monitor` and `callback.report` the report path after training.
-| `**monitor_kwargs` | | Passed to `Monitor`. `out` defaults to `<args.output_dir>/ormas_run`, `name` to `args.run_name`. |
+`callback.note_loss(loss)` and `callback.close()` are public; `callback.monitor` is the `Monitor` and `callback.report` the report path after training. `close()` never raises: a failure while closing is logged and kept in `callback.close_error`, so it cannot replace your own training exception.
+
+If the Trainer's optimizer holds no torch optimizer over the model's own parameters (DeepSpeed, custom wrappers), the monitor runs without it: one line says so, repair and the scaler are dropped, and no certificate is issued; alarms and the record still work.
 
 ## What you get on a transformer
 

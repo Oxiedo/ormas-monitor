@@ -15,7 +15,7 @@ For each channel that is due, the monitor:
 
 1. re-initialises the incoming filter (Kaiming-normal, ReLU gain) and sets the producer's bias to 0;
 2. resets the BatchNorm: scale γ = 1, shift β = 0, running mean 0, running variance 1;
-3. zeroes the optimizer state (momentum and second moment) for exactly those channels, and nothing else.
+3. zeroes every optimizer-state tensor shaped like a touched parameter (momentum, second moment) for exactly those channels, and nothing else.
 
 It writes a `repair` event with the layer, the channel indices, the method, the number of optimizer state slices reset, and the measured size of the change: ‖ΔW‖, ‖W‖ before and after, and their ratio. The event also says where the new weights came from: torch's global RNG by default, or a generator seeded from (`repair_seed`, step, layer) when [`repair_seed`](../reference/config.md) is set or the run is distributed. Framework wrappers around the optimizer (Lightning, Accelerate) are unwrapped first.
 

@@ -2,7 +2,7 @@
 
 ## Where `step()` goes
 
-Call `mon.step(loss)` **once per optimizer step**, after `loss.backward()` and before `optimizer.step()`. At that point every gradient for the step exists and nothing has used it yet.
+Call `mon.step(loss)` **once per optimizer step**, after `loss.backward()` and before `optimizer.step()`. At that point every gradient for the step exists and nothing has used it yet. Called before `backward()`, the monitor sees no gradients: it writes a `no_gradients` warning and the reports say NOT MONITORED instead of healthy.
 
 ```python
 from ormas_monitor import Monitor
@@ -29,6 +29,8 @@ with Monitor(model, optimizer, out="runs/exp1") as mon:
 ```
 
 `close()` writes `run_end`, then the reports, and returns the path of the engineer report. Pass `close(report=False)` to skip the reports; you can build them later with `ormas-monitor report runs/exp1`.
+
+A new `Monitor` on a directory that already holds a record raises `FileExistsError`. Use a fresh `out=` per run, or `overwrite=True` to replace the old record on purpose.
 
 ## Gradient accumulation
 
@@ -73,12 +75,13 @@ optimizer.step()
 | `config` | `None` | A [MonitorConfig](../reference/config.md); the shortcuts above override its fields. |
 | `scaler` | `None` | A `torch.amp.GradScaler`. See [Mixed precision](mixed-precision.md). |
 | `layers` | `None` | `fnmatch` patterns restricting which layers are watched. See [Large models](large-models.md). |
+| `overwrite` | `False` | Replace a record already in `out`. By default an existing record raises `FileExistsError`. |
 
 All of them, and the configuration object, are in [MonitorConfig](../reference/config.md).
 
 ## What the monitor needs from your model
 
 - **Nothing for alarms and loss checks.** Any `nn.Module` works.
-- **For channel checks and the certificate:** `Conv1d/2d/3d` or `Linear` layers, optionally followed by `BatchNorm1d/2d/3d` or `SyncBatchNorm`, followed by an `nn.ReLU` or `nn.ReLU6` **module**, and the optimizer passed to `Monitor`. A functional `F.relu` call is not a module and cannot be seen by a hook, so those channels are reported as constant, never certified.
+- **For channel checks and the certificate:** `Conv1d/2d/3d` or `Linear` layers, optionally followed by `BatchNorm1d/2d/3d` or `SyncBatchNorm`, followed by an `nn.ReLU` or `nn.ReLU6` **module** that is the only consumer of that output, and the optimizer passed to `Monitor` (`SGD` or the Adam family; see [the conditions](../concepts/dead-channels.md#the-conditions-the-monitor-checks-before-it-issues-a-certificate)). A functional `F.relu` call is not a module and cannot be seen by a hook, so those channels are reported as constant, never certified.
 
-The monitor learns the wiring from the first sampled forward pass in training mode. Run at least one training forward pass before the first `step()`, which is what a normal loop does.
+The monitor learns the wiring from the first sampled step: which tensor each BatchNorm reads during the forward pass, and the autograd graph of the loss passed to `step()` (or of the model's outputs if no loss with a `grad_fn` is given). Run a training forward pass before each `step()`, which is what a normal loop does. Without an autograd graph at that step, no certificate is issued for the run; the `manifest` event says why.

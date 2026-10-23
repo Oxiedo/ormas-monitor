@@ -12,8 +12,6 @@ mon = Monitor(model, optimizer, config=cfg, check_every=20)   # keyword shortcut
 
 The whole configuration is written to the record in `run_start.config`, so a reader can see which thresholds produced each alarm.
 
-<!-- VERIFY: principal — `MonitorConfig` exported from ormas_monitor/__init__.py (today: `from ormas_monitor.config import MonitorConfig`) -->
-
 ## Fields
 
 ### Sampling and baselines
@@ -46,6 +44,12 @@ The whole configuration is written to the record in `run_start.config`, so a rea
 | `certified_repair_streak` | `2` | Checks a certified-dead channel must stay stuck before it is repaired. A proven-dead channel cannot recover, so waiting longer gains nothing. |
 | `decayed_rel_tol` | `1e-5` | A filter or BatchNorm scale below this multiple of the layer median (and not exactly zero), with shift ≤ 0, is flagged as decayed. |
 | `repair_seed` | `None` | `None`: repaired filters come from torch's global RNG, as in 0.1. An int: they come from a generator seeded from (`repair_seed`, step, layer), so the repair is identical in every process. Under `torch.distributed`, `None` is treated as `0`. |
+
+### Certificate
+
+| Field | Default | Meaning |
+|---|---|---|
+| `certify_optimizers` | `()` | Names of extra optimizer types (class name, or `module.QualName`) the certificate may trust. Built in: `SGD`, `Adam`, `AdamW`, `NAdam`, `RAdam`, `Adamax`. For an opted-in optimizer, every state tensor shaped like a parameter must be exactly zero for the channel, and only decoupled weight decay is accepted. Opting in asserts that, with zero gradient and zero state, its step leaves the parameter alone apart from decay. See [Dead channels](../concepts/dead-channels.md). |
 
 ### Record size
 

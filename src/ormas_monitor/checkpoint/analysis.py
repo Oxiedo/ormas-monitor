@@ -298,10 +298,12 @@ def _batchnorm_pass(reader: _Reader, relu_after: set[str] | None, known: set[str
         if scan.certified:
             findings.append({
                 "severity": "warning", "kind": "dead_channels", "layer": prod, "batchnorm": bn,
-                "title": f"{len(scan.certified)} of {size} channels in {where} are dead for good{cond}",
+                "title": f"{len(scan.certified)} of {size} channels in {where} are dead (zero filter or scale, shift <= 0){cond}",
                 "detail": "Their incoming filter or BatchNorm scale is exactly zero and the BatchNorm "
                           "shift is <= 0, so the output is a constant <= 0. A ReLU then closes for "
-                          "every input and no gradient can ever reach them again (Theorem 2). "
+                          "every input and no gradient reaches them (Theorem 2). They stay dead in further training "
+                          "only if the ReLU is the BatchNorm's only consumer, BatchNorm stays in training mode and "
+                          "the optimizer holds no momentum for them; a weights file cannot show these. "
                           "Does not apply where the BatchNorm output is added to a skip connection "
                           "before the ReLU.",
                 "channels": scan.certified})

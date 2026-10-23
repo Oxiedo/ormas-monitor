@@ -5,7 +5,7 @@ Every event the monitor writes goes to `diary.jsonl` in the run directory: one J
 ## What it contains
 
 - `run_start`: the tool version, model class, parameter count, a SHA-256 of the architecture (parameter names and shapes), optimizer settings, Python, PyTorch, platform and the monitor configuration.
-- One event per thing that happened: alarms, stuck channels, certificates, repairs, loss spikes, non-finite values.
+- One event per thing that happened: alarms, stuck channels, certificates and refused certificates, repairs, loss spikes, non-finite values, checks without gradients.
 - `run_end`: step and check counts, totals, and the SHA-256 of `metrics.jsonl`, which binds the metrics file to the record.
 
 Every event type and its fields are listed in the [record format reference](../reference/record-format.md).
@@ -25,30 +25,32 @@ ormas-monitor verify ormas_run --strict                # also fail when a part i
 ormas-monitor verify ormas_run --json
 ```
 
-Real output for a signed run:
+Real output for the signed sample run in `sample_reports/` (run from that folder), verified with its public key (`--key`):
 
 ```text
-ormas-monitor verify run2  (16 events)
-  [ok  ] JSON lines              16 events parsed
+ormas-monitor verify cifar10_with_repair_signed  (37 events)
+  [ok  ] JSON lines              37 events parsed
   [ok  ] genesis link            first event links to the genesis hash
-  [ok  ] hash chain              all 16 hashes recompute and link
-  [ok  ] sequence numbers        seq runs 0..15
+  [ok  ] hash chain              all 37 hashes recompute and link
+  [ok  ] sequence numbers        seq runs 0..36
   [ok  ] run_start / run_end     run_start is first and run_end is last: the run finished
-  [ok  ] event schema            all 16 events match record schema 1
-  [ok  ] metrics hash            sha256 2fba1da98b79... as recorded in run_end
-  [ok  ] seal (record.json)      diary.jsonl, metrics.jsonl and the diary head match the seal of 2026-10-22T13:04:49Z
-  [ok  ] signature (record.sig)  valid Ed25519 signature over record.json by key d035cf442fdf...
+  [ok  ] event schema            all 37 events match record schema 1
+  [ok  ] metrics hash            sha256 93cca3ff1854... as recorded in run_end
+  [ok  ] seal (record.json)      diary.jsonl, metrics.jsonl and the diary head match the seal of 2026-10-23T06:47:26Z
+  [ok  ] signature (record.sig)  valid Ed25519 signature over record.json by key deb089ff782e...
 PASSED: 9 of 9 checks passed
 This record is evidence of what the monitor wrote, not a compliance certificate.
 ```
 
 A record written by ormas-monitor 0.1, which predates the event schema, shows `[skip] event schema` instead.
 
-Each check has one of five statuses: `ok` (pass), `FAIL`, `--` (absent: the part does not exist, for example an unsealed run), `??` (unchecked: it exists but could not be checked as asked, for example a signature with no key given) and `skip` (the check could not run). Without `--strict`, absent and unchecked parts do not fail verification. A lone `diary.jsonl` file, such as the one in `sample_reports/`, can be verified too; its metrics, seal and signature are then reported as absent.
+Each check has one of five statuses: `ok` (pass), `FAIL`, `--` (absent: the part does not exist, for example an unsealed run), `??` (unchecked: it exists but could not be checked as asked, for example a signature with no key given) and `skip` (the check could not run). Without `--strict`, absent and unchecked parts do not fail verification. A lone `diary.jsonl` file can be verified too; its metrics, seal and signature are then reported as absent. Without `--key`, a present signature is `??` (unchecked) and the run passes 8 of 9; an unsealed, unsigned run passes 7 of 9 with 2 absent.
+
+Verification is built to fail cleanly on a hostile record: malformed lines, odd seal values, a seal naming files outside the run directory, symlinked record files and a FIFO in place of a file all produce a failed check, never a crash or a hang.
 
 ## Sealing and signing
 
-A **seal** (`record.json` in the run directory) names the SHA-256 of `diary.jsonl` and `metrics.jsonl`, the hash of the last diary line and the number of events. A **signature** (`record.sig`) is a detached Ed25519 signature over the exact bytes of `record.json`. Both refuse a record that does not verify.
+A **seal** (`record.json` in the run directory) names the SHA-256 of `diary.jsonl` and `metrics.jsonl`, the hash of the last diary line and the number of events. A **signature** (`record.sig`) is a detached Ed25519 signature over the exact bytes of `record.json`. Both refuse a record that does not verify, and both refuse to write through a symbolic link (a planted `record.json` link cannot redirect the write to another file).
 
 ```bash
 pip install "ormas-monitor[signing]"
@@ -76,7 +78,7 @@ ormas-monitor diff runs/approved runs/candidate --out diff.html   # also an HTML
 ormas-monitor diff runs/approved runs/candidate --json
 ```
 
-The diff reads the two records only, never the weights. It says whether both records verify, whether the architectures match, which optimizer, monitor and environment settings changed, and how alarms, peak stuck channels, certificates and repairs differ per layer, ending with a one-line verdict.
+The diff reads the two records only, never the weights. It opens with a verdict: integrity first (whether both records verify), then the net per-layer result, for example "Run B is healthier in 2 layers ... and has more silent channels in 1". A detail line follows: whether the architectures match, which optimizer and monitor settings changed, how health is judged, and repairs. Then come the setting changes and a per-layer table of alarms, stuck channels, silent channels, certificates and repairs. A layer's health is judged by channels stuck according to the weights (certified dead, constant or decayed) and open alarms; silent channels are reported separately and never make a layer less healthy on their own. In `--json` the headline is `verdict` and the detail `verdict_detail`.
 
 ## Threat model
 

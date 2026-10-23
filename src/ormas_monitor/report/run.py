@@ -213,7 +213,7 @@ def _headline(f: RunFacts) -> tuple[str, str, str, str]:
                 + (f"; {plural(len(repairs), 'repair')} applied earlier" if repairs else ""), detail)
     if repairs:
         head = (f"{plural(len(repairs), 'repair')} applied ({fmt(sum(int(e.get('count') or 0) for e in repairs))} "
-                f"channels); no channel was proven dead, constant or decayed at the end of the run")
+                f"channels); no channel was certified dead, constant or decayed at the end of the run")
         if f.silent_at_end:
             head += f"; {sum(f.silent_at_end.values()):,} channels silent at the last check (unproven)"
         return "fixed", "Repaired", head, detail

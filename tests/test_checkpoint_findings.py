@@ -167,11 +167,11 @@ def test_titles_name_layer_kind_from_weight_rank():
     sd["1.bias"][:2] = -1
     sd["3.weight"][1] = 0
     titles = {f["kind"]: f["title"] for f in check(sd)["findings"]}
-    assert titles["dead_channels"] == ("2 of 8 channels in layer `0` (Linear, BatchNorm `1`) are dead for good "
+    assert titles["dead_channels"] == ("2 of 8 channels in layer `0` (Linear, BatchNorm `1`) are dead (zero filter or scale, shift <= 0) "
                                        "if a ReLU directly follows `1`")
     assert titles["zero_filters"] == "1 of 4 output units of layer `3` (Linear) have all-zero weights"
     traced = {f["kind"]: f["title"] for f in check(sd, relu_after={"1"})["findings"]}
-    assert traced["dead_channels"] == "2 of 8 channels in layer `0` (Linear, BatchNorm `1`) are dead for good"
+    assert traced["dead_channels"] == "2 of 8 channels in layer `0` (Linear, BatchNorm `1`) are dead (zero filter or scale, shift <= 0)"
 
 
 def test_title_without_a_producer_names_the_batchnorm():
@@ -181,7 +181,7 @@ def test_title_without_a_producer_names_the_batchnorm():
         bn.bias[0] = -1
     f = next(f for f in check({f"stem.bn.{k}": v for k, v in bn.state_dict().items()})["findings"]
              if f["kind"] == "dead_channels")
-    assert f["title"].startswith("1 of 4 channels in BatchNorm `stem.bn` are dead for good")
+    assert f["title"].startswith("1 of 4 channels in BatchNorm `stem.bn` are dead (zero filter or scale, shift <= 0)")
 
 
 def zero_filter_with_bias(bias: float, beta: float, gamma: float = 1.0) -> dict:

@@ -15,7 +15,7 @@ Wrappers such as `torch.compile` and DDP are unwrapped first, so patterns use th
 
 The monitor does nothing on unsampled steps. On a sampled step it:
 
-- reads one gradient norm per watched layer, stacked on the device and copied to the host once;
+- reads one gradient norm per watched layer, stacked on the device and copied to the host once per device;
 - records the per-channel maximum activation of watched Conv/Linear/BatchNorm outputs during that step's forward pass.
 
 Measured overhead is **+3.6%** median epoch time at `check_every=50` on the CIFAR-10 CNN (one seed, Apple M-series). It has not been measured on large models. **Status: OPEN.** To spend less, raise `check_every` or narrow `layers=`.

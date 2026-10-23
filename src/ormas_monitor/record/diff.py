@@ -212,7 +212,7 @@ END_KEYS = ("proven_at_end", "open_alarms")
 HISTORY_KEYS = ("proven_peak", "certified", "alarms")
 # Weak evidence: silent channels gave no positive output on the batches seen, which proves nothing.
 SILENT_KEYS = ("silent_at_end", "silent_peak")
-LABELS = {"proven_at_end": "proven-stuck", "open_alarms": "open alarms", "proven_peak": "peak proven-stuck",
+LABELS = {"proven_at_end": "stuck (from weights)", "open_alarms": "open alarms", "proven_peak": "peak stuck (from weights)",
           "certified": "certified dead", "alarms": "alarms", "silent_at_end": "silent",
           "silent_peak": "peak silent"}
 
@@ -323,7 +323,7 @@ def _verdict(a: dict, b: dict, same_arch: bool, config: list[dict], layers: list
     if worse or better or mixed or more_silent or fewer_silent:
         if max(len(worse), len(better), len(mixed), len(more_silent), len(fewer_silent)) > 3:
             detail.append(_layer_sentence(by_name, worse, better, mixed, more_silent, fewer_silent, 10))
-        detail.append("A layer's health is judged by proven-stuck channels (certified dead, constant or decayed "
+        detail.append("A layer's health is judged by stuck channels (certified dead, constant or decayed "
                       "to ~0, read from the weights) and open alarms at the end of each run, then by their peaks "
                       "and alarm counts. Silent channels only produced no positive output on the batches seen; "
                       "they are reported separately and never make a layer less healthy on their own.")

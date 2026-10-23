@@ -71,7 +71,7 @@ def test_zeroed_layer_is_named_as_worse(runs):
     row = next(x for x in r["layers"] if x["layer"] == "3")
     assert row["certified_a"] == 0 and row["certified_b"] == 16 and row["peak_stuck_b"] == 16
     assert r["events"]["certificate"] == {"a": 0, "b": 1}
-    assert r["verdict"] == ("Run B is less healthy in 1 layer (layer 3: proven-stuck 0 to 16, "
+    assert r["verdict"] == ("Run B is less healthy in 1 layer (layer 3: stuck (from weights) 0 to 16, "
                             "certified dead 0 to 16).")
     assert row["health"] == "worse" and row["proven_at_end_b"] == 16
     bn = next(x for x in r["layers"] if x["layer"] == "4")
@@ -216,8 +216,8 @@ def test_repair_run_is_healthier_even_when_a_layer_has_more_silent_units(demo_ar
     assert cls["silent_at_end_b"] > cls["silent_at_end_a"] and cls["proven_at_end_a"] == cls["proven_at_end_b"] == 0
     c2, c3 = rows["conv2.0"], rows["conv3.0"]
     assert r["verdict"] == (
-        f"Run B is healthier in 2 layers (conv2.0: proven-stuck {c2['proven_at_end_a']} to 0, "
-        f"{c2['channels_repaired_b']} repaired; conv3.0: proven-stuck {c3['proven_at_end_a']} to 0, "
+        f"Run B is healthier in 2 layers (conv2.0: stuck (from weights) {c2['proven_at_end_a']} to 0, "
+        f"{c2['channels_repaired_b']} repaired; conv3.0: stuck (from weights) {c3['proven_at_end_a']} to 0, "
         f"{c3['channels_repaired_b']} repaired) and has more silent channels in 1 (classifier.0: silent "
         f"{cls['silent_at_end_a']} to {cls['silent_at_end_b']}, unproven).")
     assert "less healthy" not in r["verdict"]
@@ -228,7 +228,7 @@ def test_repair_run_is_healthier_even_when_a_layer_has_more_silent_units(demo_ar
 def test_reverse_watch_vs_repair_names_the_proven_layers_as_worse(demo_arms):
     r = diff_runs(demo_arms[1], demo_arms[0])
     assert r["worse"] == ["conv2.0", "conv3.0"] and r["fewer_silent"] == ["classifier.0"]
-    assert r["verdict"].startswith("Run B is less healthy in 2 layers (conv2.0: proven-stuck 0 to ")
+    assert r["verdict"].startswith("Run B is less healthy in 2 layers (conv2.0: stuck (from weights) 0 to ")
     assert "and has fewer silent channels in 1 (classifier.0" in r["verdict"]
 
 
