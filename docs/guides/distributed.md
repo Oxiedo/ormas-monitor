@@ -1,7 +1,7 @@
 # Distributed training
 
 !!! warning "Not yet tested on multi-GPU hardware"
-    Distributed support is covered by CPU unit tests only. It has not been run on a multi-GPU machine or at scale. **Status: OPEN.** Please report what you see.
+    Distributed support is covered by two-process CPU tests (gloo) that run on Linux and macOS, not Windows. It has not been run on a multi-GPU machine or at scale. **Status: OPEN.** Please report what you see.
 
 Create the monitor on **every rank**, the same way, with the wrapped model. The monitor detects `torch.distributed` and the wrapper itself.
 

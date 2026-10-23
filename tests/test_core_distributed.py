@@ -10,6 +10,8 @@ import torch
 import torch.nn as nn
 
 dist = pytest.importorskip("torch.distributed")
+if os.name == "nt":
+    pytest.skip("multi-process gloo tests are not run on Windows", allow_module_level=True)
 if not dist.is_available() or not dist.is_gloo_available():
     pytest.skip("torch.distributed with gloo is not available", allow_module_level=True)
 

@@ -31,7 +31,7 @@ Stated in one place so they do not drift.
 ## Hardware and scale
 
 - **All measured numbers come from one Apple-silicon Mac** on CIFAR-10, with one seed. **Not yet tested on NVIDIA/Linux, multi-GPU or at scale.** A GPU stress test is planned.
-- **Distributed support (DDP/FSDP) is covered by CPU unit tests only.** Status: OPEN.
+- **Distributed support (DDP/FSDP) is covered by two-process CPU tests on Linux and macOS only (not Windows).** Status: OPEN.
 - **Overhead on large models is not measured.**
 
 ## `check`
