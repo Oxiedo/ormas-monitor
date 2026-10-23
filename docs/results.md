@@ -103,6 +103,23 @@ python examples/reproduce/classifier_dead_units.py --data DIR
 
 It trains the 8 pre-lesion epochs, then counts the units that never fire. Output on the reference machine: 160 of 256 never positive on the 10,000 test images, and 159 of 256 on the 50,000 training images.
 
+## 6. Removing dead channels makes a model smaller and faster
+
+`check` flagged 292 dead channels in torchvision's ImageNet VGG-19-BN. These are channels whose BatchNorm output is a constant ≤ 0 before a ReLU, so they always output 0. We cut them out of the network: their filters, their BatchNorm entries, and the matching inputs of the next layer. Then we compared the cut model with the original on 64 real photos (CIFAR-10 test images upscaled to 224 px).
+
+| | Original | Dead channels removed |
+|---|---:|---:|
+| Top-1 answers | — | **identical on 100% of photos** (largest logit difference 1.3 × 10⁻⁵, floating-point rounding) |
+| Compute per image | 19.63 GMACs | 15.98 GMACs (**18.6% less**) |
+| Parameters | 143.7M | 142.2M |
+| CPU latency, batch 16 | — | **12–18% faster** (three runs on an Apple-silicon laptop: 11.7%, 12.7%, 18.4%) |
+
+The compute saving is much larger than the share of channels (5.3%) because most of the dead channels sit in the early layers, which run at high resolution. In one 224 × 224 layer, 20 of 64 channels are dead.
+
+Reproduce: `python examples/reproduce/prune_vgg19.py --data DIR`. The script contains the removal code; `ormas-monitor` itself finds and proves the channels but does not yet remove them for you.
+
+How much a given model gains depends entirely on how many dead channels it carries. VGG-19-BN carries many; torchvision's ResNet-50 has one. Run `ormas-monitor check` on your model to see.
+
 ## What these results do not show
 
 - Anything on NVIDIA GPUs, multi-GPU, or models larger than these.

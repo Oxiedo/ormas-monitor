@@ -21,7 +21,7 @@ resnet18_finetuned.pt: 11,699,112 parameters in 122 tensors (pytorch, float32, i
   [warning] 40 channels died between the two checkpoints
   [warning] 40 of 256 channels in layer `layer3.0.conv1` (Conv2d, BatchNorm `layer3.0.bn1`) are dead (zero filter or scale, shift <= 0) if a ReLU directly follows `layer3.0.bn1`
   [warning] 7 of 64 channels in layer `conv1` (Conv2d, BatchNorm `bn1`) are effectively dead if a ReLU directly follows `bn1`
-  [info] 1 of 64 channels in layer `conv1` (Conv2d, BatchNorm `bn1`) are probably dormant if a ReLU directly follows `bn1`
+  [info] 1 of 64 channels in layer `conv1` (Conv2d, BatchNorm `bn1`) is probably dormant if a ReLU directly follows `bn1`
   [info] 3 of 64 channels of BatchNorm `bn1` never vary (running variance ~0)
   [info] 100 of 102 tensors are exactly unchanged
   note: Wiring not known, so BatchNorm findings say "if a ReLU directly follows". Pass --arch torchvision:<name> or --arch hf for exact wiring.

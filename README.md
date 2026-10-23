@@ -13,7 +13,7 @@ Everything runs on your machine. The core makes no network calls and never reads
 ## Why use it
 
 - **Alerts you can automate.** Other tools say a layer *looks* dead. This one issues a certificate only when the channel provably cannot recover, so it is safe to drive repairs and release gates (`check --fail-on warning`) without a human in the loop.
-- **Find dead weight you already ship.** In 19 of 21 torchvision ImageNet models that use BatchNorm → ReLU, it found channels decayed to ~0. Up to 9.9% of the checked channels in DenseNet-169. Switching them all off left the logits exactly unchanged on 256 real images; switching off the same number of live channels changed the answers on 98–100% of images.
+- **Find dead weight you already ship.** In 19 of 21 torchvision ImageNet models that use BatchNorm → ReLU, it found channels decayed to ~0, up to 9.9% of the checked channels in DenseNet-169. Switching them off left the answers unchanged; switching off the same number of live channels changed them on 98–100% of images. In VGG-19-BN, **cutting them out saved 18.6% of the compute and ran 12–18% faster on CPU, with identical answers** ([details](https://github.com/Oxiedo/ormas-monitor/blob/main/docs/results.md#6-removing-dead-channels-makes-a-model-smaller-and-faster)).
 - **A signed record of what happened in training,** plus a one-page summary for non-engineers.
 - **Nothing to trust us with:** open source, local, never reads your data.
 

@@ -26,6 +26,14 @@ It can also check a finished model. On 19 of 21 popular public image models it f
 
 A training run can fail silently: the loss curve still moves, but part of the model has stopped learning. That capacity is paid for in compute and delivers nothing. In our CIFAR-10 demonstration, after two layers of a trained network were broken, the run with the monitor only watching sat at chance accuracy (10.00%) for all 12 remaining epochs, while the run with repair recovered to 76.77% (healthy: 78.84%). That is one seed on one Apple-silicon Mac, a small model and a deliberately broken network; exact percentages shift with software version and hardware. It shows the mechanism, not what to expect on your models.
 
+## Where it saves money
+
+| | What it saves | Evidence so far |
+|---|---|---|
+| **Leaner models** | Inference: the cost you pay every time the model runs | In VGG-19-BN, removing the dead channels it found cut compute by 18.6% and ran 12–18% faster on CPU, with identical answers. How much a given model gains depends on how many dead channels it carries; one `check` tells you. |
+| **No wasted training runs** | GPU time on runs that broke without anyone noticing | In our CIFAR-10 test, the run without repair stayed stuck at chance from the break to the end: 92% of all its training steps. With repair on, the monitor caught the break at its next check and the run recovered without a restart. |
+| **Fewer bad releases** | Shipping a model that broke during fine-tuning | `check --against` names what died between two versions; `--fail-on warning` blocks the release automatically. |
+
 ## What the summary report tells you
 
 At the end of a run the monitor writes `summary.html` and `summary.md` next to the engineer report. One page, in plain language, under these headings:
@@ -60,6 +68,15 @@ Be precise about the limits:
 - **The record covers only what the monitor observes:** layer gradients, channel states, loss, and repairs. It says nothing about your data, its provenance, bias, evaluation, or the deployed system.
 - **The record is written by the training process.** It shows that the record has not been edited since it was written (or signed); it does not prove the training happened as described. See the [threat model](concepts/record.md#threat-model).
 - This page is our reading of the regulation's general shape, not legal advice. Ask counsel what your obligations are.
+
+## For regulated teams
+
+If your models fall under the EU AI Act's high-risk rules (as scheduled when we last checked: from 2 December 2027, later for AI inside regulated products), or under medical-device rules such as the US FDA's change-control plans, two things here are directly useful:
+
+- **A signed record of how each model was trained:** every problem, every fix, which checks ran. Anyone you give the public key can verify it with one command.
+- **"What changed since the version we approved?"** `ormas-monitor diff` compares two training runs, and `check --against` compares two model files.
+
+This is evidence for your technical documentation, not compliance itself. It does not cover your data, its quality or bias, or how the system behaves once deployed. The strongest fit today is regulated *image* AI, for example medical imaging, because that is where the dead-channel proof applies. Dates and obligations change, so confirm both with counsel.
 
 ## What it does not do
 

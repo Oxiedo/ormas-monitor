@@ -181,7 +181,7 @@ def test_title_without_a_producer_names_the_batchnorm():
         bn.bias[0] = -1
     f = next(f for f in check({f"stem.bn.{k}": v for k, v in bn.state_dict().items()})["findings"]
              if f["kind"] == "dead_channels")
-    assert f["title"].startswith("1 of 4 channels in BatchNorm `stem.bn` are dead (zero filter or scale, shift <= 0)")
+    assert f["title"].startswith("1 of 4 channels in BatchNorm `stem.bn` is dead (zero filter or scale, shift <= 0)")
 
 
 def zero_filter_with_bias(bias: float, beta: float, gamma: float = 1.0) -> dict:

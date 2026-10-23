@@ -29,7 +29,7 @@ Channels that output nothing still cost compute on every forward pass, in traini
 
 As a control, we switched off the *same number* of randomly chosen live channels in ResNet-18, VGG-19-BN and MnasNet (128 images). The answers changed on 98–100% of images. Reproduce with `python examples/reproduce/zero_flagged_channels.py --data DIR`; add `--images 128 --control` for the control.
 
-This shows the flagged channels can be removed without changing the model's outputs on these images. We have not removed them structurally, so speed and memory savings are **not measured**. They depend on your pruning tool and hardware.
+**And removing them saves real compute.** In VGG-19-BN we cut the 292 flagged channels out of the network. The cut model gave the same top-1 answer on 100% of 64 real photos, needed **18.6% less compute** per image, and ran **12–18% faster** on a laptop CPU (three runs). See [Results §6](results.md#6-removing-dead-channels-makes-a-model-smaller-and-faster). Savings depend on the model: VGG-19-BN carries many dead channels, ResNet-50 almost none.
 
 ## 3. A record of what happened in training
 

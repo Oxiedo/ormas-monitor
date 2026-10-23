@@ -2,6 +2,16 @@
 
 All notable changes to `ormas-monitor` are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [semantic versioning](https://semver.org/) (before 1.0, a minor release may change the API).
 
+## [0.2.3] — 2026-10-23
+
+### Added
+- `examples/reproduce/prune_vgg19.py`: cuts the dead channels `check` finds out of torchvision's VGG-19-BN. The result has identical answers on real photos, 18.6% less compute, and runs 12–18% faster on CPU. Documented in Results §6, Why use it, For leaders and the README.
+- `check --all` lists every info-level finding; by default the terminal shows a one-line count once there are more than five, and the HTML report still lists them all.
+- Docs: "Where it saves money" and "For regulated teams" for leaders; the product direction (Lean, Guard, Record) with status labels in Work with us.
+
+### Fixed
+- Finding titles use the singular when one channel is affected ("1 of 64 channels ... is").
+
 ## [0.2.2] — 2026-10-23
 
 ### Fixed
@@ -84,6 +94,7 @@ First release.
 - `ormas-monitor demo`: the CIFAR-10 dead-layer experiment, watch-only vs repair.
 - Examples: full demo, overhead measurement, torchvision scan.
 
+[0.2.3]: https://github.com/Oxiedo/ormas-monitor/releases/tag/v0.2.3
 [0.2.2]: https://github.com/Oxiedo/ormas-monitor/releases/tag/v0.2.2
 [0.2.1]: https://github.com/Oxiedo/ormas-monitor/releases/tag/v0.2.1
 [0.2.0]: https://github.com/Oxiedo/ormas-monitor/releases/tag/v0.2.0

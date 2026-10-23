@@ -43,6 +43,8 @@ def register(sub) -> None:
     c.add_argument("--fail-on", choices=tuple(FAIL_ON), default="critical",
                    help="lowest severity that makes the exit code 1 (default: critical)")
     c.add_argument("--quiet", action="store_true", help="print nothing except errors and --json output")
+    c.add_argument("--all", action="store_true", dest="show_all",
+                   help="list every info-level finding too (by default they are counted, and listed in the report)")
     c.set_defaults(func=run)
 
 
@@ -82,13 +84,21 @@ def run(a) -> int:
             else "no BatchNorm layers"
         say(f"{Path(a.file).name}: {result['parameters']:,} parameters in {result['tensors']:,} tensors "
             f"({result['format']}, {dtypes}); wiring: {wiring}; {_count(len(f), 'finding')} in {seconds:.1f} s")
+        info = [x for x in f if x["severity"] == "info"]
+        brief = len(info) > MAX_INFO_LINES and not getattr(a, "show_all", False)
         for x in f:
-            say(f"  [{x['severity']}] {x['title']}")
+            if not (brief and x["severity"] == "info"):
+                say(f"  [{x['severity']}] {x['title']}")
+        if brief:
+            say(f"  plus {_count(len(info), 'info finding')} (no action needed; listed in the report, or use --all)")
         for n in result["notes"]:
             say(f"  note: {n}")
         say(f"report: {out}")
         say(exit_reason(result["findings"], a.fail_on))
     return 1 if failing else 0
+
+
+MAX_INFO_LINES = 5       # above this many info findings, the terminal shows a count instead
 
 
 def _count(n: int, word: str) -> str:

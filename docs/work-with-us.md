@@ -23,16 +23,26 @@
 
 If you train transformers or large language models, talk to us too. Today you get the alarms and the record, but not the proof, and that is exactly the kind of gap we want partners to shape.
 
-## What we are building next
+## Where this is going
 
-Nothing here exists yet. Each item is labelled with its status.
+**Oxiedo's goal: every model trains healthy, ships lean, and comes with a record anyone can verify, automatically.**
 
-| Planned | Status |
+| From (how it usually is) | To (with Oxiedo) |
 |---|---|
-| **Team edition:** shared, signed records across many runs; "compare to the approved run" gates; runs on your own servers | DESIGNED |
-| **Documentation pack:** training records formatted for model-risk reviews and AI-regulation technical documentation | DESIGNED |
-| **Transformer support:** proofs beyond the BatchNorm → ReLU building block | OPEN (research) |
-| **Tested on NVIDIA GPUs and multi-GPU clusters** | PLANNED |
+| You find out a run failed when the bill arrives | Failures are caught, and fixed, while training runs |
+| Models ship carrying dead weight nobody can see | Dead parts are proven and removed before release |
+| "How was this model trained?" has no good answer | Every model has a signed record of its training |
+
+The free tool is the first piece. What comes next, with honest status:
+
+| Product | What it is | Status |
+|---|---|---|
+| **ormas-monitor** (free, open source) | Finds, proves and repairs dead parts during training; checks model files; signed records and reports | **Available now** |
+| **Oxiedo Lean** | One command that proves and removes dead weight, returning a smaller, faster model and a savings report | **Next.** Shown by hand on VGG-19-BN (18.6% less compute, same answers); not yet automated |
+| **Oxiedo Guard** (team edition) | Every training run across a team watched and auto-repaired, release gates, "compare to the approved run", on your own servers | DESIGNED |
+| **Oxiedo Record** | Training records formatted for model-risk reviews and AI-regulation technical documentation | DESIGNED |
+| Transformer support | Proofs beyond the BatchNorm → ReLU building block | OPEN (research) |
+| NVIDIA and multi-GPU testing | The test suite runs on Linux, macOS and Windows CPUs today | PLANNED |
 
 ## Get in touch
 

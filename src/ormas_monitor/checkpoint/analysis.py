@@ -60,6 +60,11 @@ class TensorStats:
         return self.nan + self.posinf + self.neginf
 
 
+
+def _are(n: int) -> str:
+    """Verb agreement for "N of M channels ... is/are"."""
+    return "is" if n == 1 else "are"
+
 def _rows(t: torch.Tensor, cfg: CheckConfig) -> list[torch.Tensor]:
     """Split a non-empty `t`, viewed as 2-D (rows = output units), into blocks of ~chunk_elems.
 
@@ -298,7 +303,7 @@ def _batchnorm_pass(reader: _Reader, relu_after: set[str] | None, known: set[str
         if scan.certified:
             findings.append({
                 "severity": "warning", "kind": "dead_channels", "layer": prod, "batchnorm": bn,
-                "title": f"{len(scan.certified)} of {size} channels in {where} are dead (zero filter or scale, shift <= 0){cond}",
+                "title": f"{len(scan.certified)} of {size} channels in {where} {_are(len(scan.certified))} dead (zero filter or scale, shift <= 0){cond}",
                 "detail": "Their incoming filter or BatchNorm scale is exactly zero and the BatchNorm "
                           "shift is <= 0, so the output is a constant <= 0. A ReLU then closes for "
                           "every input and no gradient reaches them (Theorem 2). They stay dead in further training "
@@ -310,7 +315,7 @@ def _batchnorm_pass(reader: _Reader, relu_after: set[str] | None, known: set[str
         if scan.decayed:
             findings.append({
                 "severity": "warning", "kind": "decayed_channels", "layer": prod, "batchnorm": bn,
-                "title": f"{len(scan.decayed)} of {size} channels in {where} are effectively dead{cond}",
+                "title": f"{len(scan.decayed)} of {size} channels in {where} {_are(len(scan.decayed))} effectively dead{cond}",
                 "detail": "Their filter or BatchNorm scale has shrunk to under 1e-5 of the layer's typical "
                           "size (or the filter is zero behind a nonzero bias, which BatchNorm cancels only up "
                           "to rounding) and their shift is <= 0, so they output ~0 for every input. This is "
@@ -319,21 +324,21 @@ def _batchnorm_pass(reader: _Reader, relu_after: set[str] | None, known: set[str
         if scan.flat:
             findings.append({
                 "severity": "info", "kind": "flat_channels", "layer": prod, "batchnorm": bn,
-                "title": f"{len(scan.flat)} of {size} channels in {where} output a constant",
+                "title": f"{len(scan.flat)} of {size} channels in {where} output{'s' if len(scan.flat) == 1 else ''} a constant",
                 "detail": "Their incoming filter or BatchNorm scale is exactly zero, so they output "
                           "the same value (up to rounding) for every input and carry no information.",
                 "channels": scan.flat})
         if dormant:
             findings.append({
                 "severity": "info", "kind": "dormant_channels", "layer": prod, "batchnorm": bn,
-                "title": f"{len(dormant)} of {size} channels in {where} are probably dormant{cond}",
+                "title": f"{len(dormant)} of {size} channels in {where} {_are(len(dormant))} probably dormant{cond}",
                 "detail": "BatchNorm shift <= -3 x |scale|: if a ReLU follows, these fire on under "
                           "~0.13% of positions when normalised inputs are roughly normal. An estimate, "
                           "not a proof.", "channels": dormant})
         if collapsed:
             findings.append({
                 "severity": "info", "kind": "collapsed_variance", "batchnorm": bn,
-                "title": f"{collapsed} of {size} channels of BatchNorm `{bn}` never vary (running variance ~0)",
+                "title": f"{collapsed} of {size} channels of BatchNorm `{bn}` never var{'ies' if collapsed == 1 else 'y'} (running variance ~0)",
                 "detail": "Whatever reaches these channels is the same for every input, so they carry no "
                           "information. Usually a dead filter upstream.",
                 "channels": (var < cfg.collapsed_var).nonzero().flatten().tolist()})
