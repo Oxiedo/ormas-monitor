@@ -3,7 +3,9 @@
 It knocks out two conv layers at epoch 3 on purpose, to show what a failure looks like.
 Run:  python examples/walkthrough_train.py   (needs torchvision; downloads CIFAR-10 into ./data once)
 """
-import torch, torch.nn as nn, torch.nn.functional as F
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 from torchvision.datasets import CIFAR10
 from ormas_monitor import Monitor                                   # <- ormas-monitor
 
@@ -20,14 +22,17 @@ mon = Monitor(model, opt, repair=True, out="my_run")                # <- ormas-m
 for epoch in range(6):
     if epoch == 3:                                                  # simulate a failure mid-training
         with torch.no_grad():
-            for b in (model[1], model[2]): b[0].weight.zero_(); b[0].bias.zero_()
+            for b in (model[1], model[2]):
+                b[0].weight.zero_()
+                b[0].bias.zero_()
         opt.state.clear()
-        print(f"--- epoch 3: two conv layers knocked out (simulated failure)")
+        print("--- epoch 3: two conv layers knocked out (simulated failure)")
     perm = torch.randperm(len(x))
     for i in range(0, len(x), 128):
         idx = perm[i:i + 128]
         loss = F.cross_entropy(model(x[idx]), y[idx])
-        opt.zero_grad(); loss.backward()
+        opt.zero_grad()
+        loss.backward()
         mon.step(loss)                                              # <- ormas-monitor
         opt.step()
     with torch.no_grad():
