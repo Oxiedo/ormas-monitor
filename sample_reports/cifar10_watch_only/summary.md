@@ -1,17 +1,17 @@
 # CIFAR-10 dead-layer demo (watch)
 
-*Training run summary · StandardCNN · 2026-10-23 00:10 · watch-only mode*
+*Training run summary · StandardCNN · 2026-10-23 05:59 · watch-only mode*
 
 > **PROBLEM, NOT REPAIRED: Part of the model stopped learning (detected at step 400) and was still stuck when the run ended.**
 
 ## What happened
 
-The monitor checked the model every 50 steps over 5,083 training steps (3 min 30 s). At step 400 it found 2 layers (conv2.0 and conv3.0) with stuck channels; 192 channels were proven dead, meaning they could never learn again on their own. They were still stuck when the run ended. The training loss (the error the model is trained to reduce) jumped once, first at step 400. The learning signal of 8 layers fell to zero or moved far outside its own normal range (9 warnings, first at step 450).
+The monitor checked the model every 50 steps over 5,083 training steps (3 h 16 min). At step 400 it found stuck channels in 2 layers, `conv2.0` (Conv2d) and `conv3.0` (Conv2d); 192 channels were proven dead, meaning they could never learn again on their own. They were still stuck when the run ended. At the last check (step 5,050), 248 channels in layer `classifier.0` (Linear) were silent: no positive output for several checks in a row. They are likely unused, not proven dead, and are not counted as stuck. The training loss (the error the model is trained to reduce) jumped once, first at step 400. The learning signal of 8 layers fell to zero or moved far outside its own normal range (9 warnings, first at step 450).
 
 ## What it cost
 
 - 4,683 of 5,083 training steps (92%) ran with part of the model stuck.
-- 3 min 17 s of wall-clock time (94% of 3 min 30 s).
+- 2 h 12 min of wall-clock time (67% of 3 h 16 min).
 
 _Counted from the first check that saw the problem; it may have started up to 50 steps earlier. Time comes from the record's own timestamps._
 
@@ -37,6 +37,7 @@ Partly: all 24 entries of the record check out, so no line was edited, removed o
 - **Channel**: One small unit inside a layer. A layer has tens to thousands of them.
 - **Stuck**: A channel that, judging from its weights, outputs nothing useful: proven dead, a constant, or shrunk to almost zero.
 - **Proven dead**: A mathematical certificate that a channel can never learn again on its own, however long training continues.
+- **Silent**: A channel that gave no positive output for several checks in a row. Often normal; it is not proof that the channel is dead, and it is not counted as stuck.
 - **Warning (alarm)**: A layer's learning signal moved far outside that layer's own normal range.
 - **Tamper-evident record**: The log of everything the monitor saw. Each line carries a fingerprint of the line before it, so edits show.
 
