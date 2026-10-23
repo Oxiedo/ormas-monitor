@@ -1034,6 +1034,8 @@ class Monitor:
                         f", {n_obs} more silent for several checks" if n_obs else "")
                 else:
                     msg = f"{where}: {n_obs} of {n} channels silent for several checks (not proven dead)"
+                if level != "none" and self.checks == 1:
+                    msg += " (already present at the first check: came with the starting weights)"
                 self._event("channels" if level != "none" else "channels_cleared", step, msg,
                             severity="warning" if level != "none" else "info", layer=name,
                             batchnorm=ch.bn_name, channels=n, level=level,

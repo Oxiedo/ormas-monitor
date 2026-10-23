@@ -111,8 +111,8 @@ def test_repaired_run_names_silent_units_and_claims_only_proven(runs):
             f"{max(e['step'] for e in reps)}. After step {last}, no check found a channel proven dead, "
             f"constant or decayed to ~0. {silent} channels were still silent at the end (likely unused, "
             f"not proven dead).**") in md
-    assert (f"At the last check (step {f.last_check}), {f.silent_at_end['8']} channels in layer `8` (Linear) "
-            f"were silent") in md
+    assert (f"At the last check (step {f.last_check}), {f.silent_at_end['8']} channels were silent in "
+            f"layer `8` (Linear)") in md
     assert "no part was stuck" not in md and "no layer was stuck" not in md.lower()
     assert "**Silent**: " in md                                     # glossary entry
     html = _read(runs["repair"], "report.html")

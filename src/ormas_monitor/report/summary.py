@@ -142,8 +142,9 @@ def _silent_sentence(f: RunFacts) -> str:
         shown = ", ".join(f"{c:,} in {_tick(f, k)}" for k, c in items[:4])
         where = f"in {len(items):,} layers ({shown}{' and more' if len(items) > 4 else ''})"
     at = f" (step {f.last_check:,})" if f.last_check is not None else ""
-    return (f"At the last check{at}, {n:,} channels {where} were silent: no positive output for several "
-            f"checks in a row. They are likely unused, not proven dead, and are not counted as stuck.")
+    were = "channel" + (" was" if n == 1 else "s were")
+    return (f"At the last check{at}, {n:,} {were} silent {where}: no positive output for several "
+            f"checks in a row. Such channels are likely unused, not proven dead, and are not counted as stuck.")
 
 
 def build(f: RunFacts) -> Summary:
@@ -205,7 +206,7 @@ def build(f: RunFacts) -> Summary:
         tone, status = "warn", "Problem, cleared"
         headline = (f"Part of the model was stuck from step {first_stuck:,} until step {last_stuck:,}, "
                     f"then recovered.")
-    elif alarms or spikes or f.silent_peaks or any(e.get("event") == "sink_error" for e in f.shown):
+    elif alarms or spikes or any(e.get("event") == "sink_error" for e in f.shown):
         tone, status = "warn", "Warnings only"
         headline = "Nothing was proven broken, but the monitor raised warnings worth a look."
     elif cov.state == "partial":
@@ -249,6 +250,13 @@ def build(f: RunFacts) -> Summary:
             how = ("had been repaired" if fixed == len(eps) else "had recovered" if not fixed
                    else "had been repaired or had recovered")
             p.append(f"By step {last_stuck:,} those channels {how}.")
+    if f.inherited:
+        n_inh = sum(st.exact for st in f.inherited.values())
+        p.append(f"At the first check, the starting weights already had {n_inh:,} stuck channel"
+                 f"{'s' if n_inh != 1 else ''} in {_layers(f, sorted(f.inherited))}. This run did not cause "
+                 f"them (they came with the model it started from, for example a pretrained model), so "
+                 f"they are not counted as a problem here; `ormas-monitor check` reports them for the file.")
+        used.add("stuck")
     if silent:
         p.append(silent)
         used.add("silent")

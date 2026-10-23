@@ -271,6 +271,7 @@ class RunFacts:
     silent_at_end: dict[str, int]           # silent channels per layer in the last state recorded
     last_check: Optional[int]               # step of the last check
     kinds: dict[str, str]                   # layer -> module type (Conv2d, Linear, ...), where recorded
+    inherited: dict[str, Stuck]             # stuck channels already present at the first check
 
     def kind(self, layer: Any) -> Optional[str]:
         return self.kinds.get(str(layer))
@@ -339,7 +340,10 @@ def analyse(run_dir: str | Path, config: ReportConfig | None = None,
 
     time_at = _clock(events, total, end)
     timeline = _timeline(metrics, events)
-    episodes = _episodes(timeline, total, events, time_at)
+    # Channels already stuck at the very first check came with the starting weights (for example a
+    # pretrained model being fine-tuned); this run did not cause them, so episodes count only the excess.
+    inherited = {k: st for k, st in (timeline[0][1] if timeline else {}).items() if st.exact > 0}
+    episodes = _episodes(timeline, total, events, time_at, inherited)
     spans = _union([(e.start, e.end) for e in episodes])
     proven = _union([(e.start, e.end) for e in episodes if e.proven])
     total_seconds = None
@@ -369,7 +373,7 @@ def analyse(run_dir: str | Path, config: ReportConfig | None = None,
                     leads=_leads(events, check_every, config), trust=trust(run_dir, end, public_key),
                     time_at=time_at, config=config, coverage=_coverage(events, metrics, end, manifests),
                     silent_at_end=silent_end, last_check=checks_at[-1] if checks_at else None,
-                    kinds=_kinds(events))
+                    kinds=_kinds(events), inherited=inherited)
 
 
 def _kinds(events: list[dict]) -> dict[str, str]:
@@ -496,8 +500,9 @@ def _timeline(metrics: list[dict], events: list[dict]) -> list[tuple[int, dict[s
 
 
 def _episodes(timeline: list[tuple[int, dict[str, Stuck]]], total: int, events: list[dict],
-              at: Callable[[int], Optional[float]]) -> list[Episode]:
-    """Merge consecutive stuck checks of each layer into intervals."""
+              at: Callable[[int], Optional[float]], inherited: dict[str, Stuck] | None = None) -> list[Episode]:
+    """Merge consecutive checks where a layer had more stuck channels than it started with."""
+    inherited = inherited or {}
     layers: list[str] = []
     for _, st in timeline:
         for k in st:
@@ -513,11 +518,12 @@ def _episodes(timeline: list[tuple[int, dict[str, Stuck]]], total: int, events: 
         cur: Optional[dict] = None
         for s, st in timeline:
             x = st.get(layer, Stuck())
-            if x.exact > 0:
+            base = inherited.get(layer, Stuck())
+            if x.exact > base.exact:
                 if cur is None:
                     cur = {"start": s, "peak": Stuck(), "proven": False}
                 cur["peak"] = cur["peak"].peak(x)
-                cur["proven"] = cur["proven"] or x.certified > 0
+                cur["proven"] = cur["proven"] or x.certified > base.certified
             elif cur is not None:
                 out.append(_close(layer, cur, s, False, repairs, at))
                 cur = None

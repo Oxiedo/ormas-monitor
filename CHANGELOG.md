@@ -2,6 +2,13 @@
 
 All notable changes to `ormas-monitor` are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [semantic versioning](https://semver.org/) (before 1.0, a minor release may change the API).
 
+## [0.2.2] — 2026-10-23
+
+### Fixed
+- **Fine-tuning a pretrained model no longer reads as a failure.** Channels that were already stuck at the first check came with the starting weights; the summary now says so and does not count them as a problem of the run. Before, a healthy fine-tune of torchvision's ResNet-18 was headlined "Problem, not repaired" because the pretrained weights already contain 7 decayed channels. The console marks such findings "already present at the first check".
+- Silent channels (unproven) no longer turn a healthy run's verdict into "Warnings only"; they are reported in the body.
+- Grammar: "1 channel was silent".
+
 ## [0.2.1] — 2026-10-23
 
 ### Fixed
@@ -77,6 +84,7 @@ First release.
 - `ormas-monitor demo`: the CIFAR-10 dead-layer experiment, watch-only vs repair.
 - Examples: full demo, overhead measurement, torchvision scan.
 
+[0.2.2]: https://github.com/Oxiedo/ormas-monitor/releases/tag/v0.2.2
 [0.2.1]: https://github.com/Oxiedo/ormas-monitor/releases/tag/v0.2.1
 [0.2.0]: https://github.com/Oxiedo/ormas-monitor/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Oxiedo/ormas-monitor/commit/d0d7e09

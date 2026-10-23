@@ -6,7 +6,7 @@
 
 ## What happened
 
-The monitor checked the model every 50 steps over 5,083 training steps (3 h 30 min). At step 400 it found stuck channels in 2 layers, `conv2.0` (Conv2d) and `conv3.0` (Conv2d); 192 channels were proven dead, meaning they could never learn again on their own. By step 450 those channels had been repaired. At the last check (step 5,050), 204 channels in layer `classifier.0` (Linear) were silent: no positive output for several checks in a row. They are likely unused, not proven dead, and are not counted as stuck. The training loss (the error the model is trained to reduce) jumped 3 times, first at step 400. The learning signal of 8 layers fell to zero or moved far outside its own normal range (8 warnings, first at step 450).
+The monitor checked the model every 50 steps over 5,083 training steps (3 h 30 min). At step 400 it found stuck channels in 2 layers, `conv2.0` (Conv2d) and `conv3.0` (Conv2d); 192 channels were proven dead, meaning they could never learn again on their own. By step 450 those channels had been repaired. At the last check (step 5,050), 204 channels were silent in layer `classifier.0` (Linear): no positive output for several checks in a row. Such channels are likely unused, not proven dead, and are not counted as stuck. The training loss (the error the model is trained to reduce) jumped 3 times, first at step 400. The learning signal of 8 layers fell to zero or moved far outside its own normal range (8 warnings, first at step 450).
 
 ## What it cost
 
