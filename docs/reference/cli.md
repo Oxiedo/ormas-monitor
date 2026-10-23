@@ -86,7 +86,7 @@ Create an Ed25519 key pair for signing records. Needs the `signing` extra.
 ormas-monitor keygen [--private PATH] [--public PATH]
 ```
 
-Writes an unencrypted private key with mode `0600` (default `ormas-signing.pem`) and its public key (default `ormas-signing.pub.pem`), both PEM. Never overwrites an existing file. Prints the key fingerprint (SHA-256 of the raw public key).
+Writes an unencrypted private key with mode `0600` on macOS and Linux (default `ormas-signing.pem`) and its public key (default `ormas-signing.pub.pem`), both PEM. Never overwrites an existing file. Prints the key fingerprint (SHA-256 of the raw public key).
 
 ## `sign`
 

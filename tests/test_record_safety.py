@@ -215,7 +215,7 @@ def test_hostile_seal_values_never_raise(run, field, value):
 @pytest.mark.parametrize("raw", [
     b"", b"{", b"[]", b"null", b"42", b'"text"', b"\xff\xfe\x00garbage", b"[" * 100_000,
     b'{"events":' + b"9" * 5000 + b"}", b'{"files":{"a":' * 3000 + b"1" + b"}}" * 3000,
-])
+], ids=lambda raw: f"raw{len(raw)}")
 def test_malformed_seal_json_fails_the_seal_check(run, raw):
     (run / "record.json").write_bytes(raw)
     r = verify_run(run)
@@ -258,7 +258,7 @@ def test_cli_verify_reports_a_dotdot_seal_as_a_failed_check(run, capsys):
     "[" * 100_000, '{"seq":' + "1" * 5000 + "}", '{"seq": 0, "event": ["x"], "severity": {"a": 1}}',
     '{"seq": {}, "time": [], "event": "alarm", "diagnosis": [1], "layer": {}, "prev": 5, "hash": null}',
     '{"seq": 0, "event": "channels", "level": {"x": []}, "step": "s"}',
-])
+], ids=lambda line: f"line{len(line)}")
 def test_hostile_diary_lines_fail_checks_without_raising(run, line):
     rows = (run / "diary.jsonl").read_text().splitlines()
     rows.insert(1, line)

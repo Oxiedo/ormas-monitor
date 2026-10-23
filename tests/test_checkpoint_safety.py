@@ -73,6 +73,7 @@ def test_symlinked_model_file_escaping_folder_refused(tmp_path, outside):
         open_source(tmp_path / "m")
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Windows symlinks need developer mode and resolve differently")
 def test_symlinks_inside_folder_and_hf_cache_blobs_allowed(tmp_path):
     folder = tmp_path / "m"
     folder.mkdir()

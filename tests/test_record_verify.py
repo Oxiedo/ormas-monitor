@@ -280,7 +280,8 @@ def other_key(tmp_path):
 
 
 def test_keygen_permissions_and_no_overwrite(keys, tmp_path):
-    assert stat.S_IMODE(os.stat(keys.private_path).st_mode) == 0o600
+    if os.name != "nt":      # Windows has no POSIX permission bits
+        assert stat.S_IMODE(os.stat(keys.private_path).st_mode) == 0o600
     assert len(keys.fingerprint) == 64
     from ormas_monitor.record import keygen
     before = keys.private_path.read_bytes()

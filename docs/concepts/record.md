@@ -59,7 +59,7 @@ ormas-monitor sign ormas_run --key reviewer.pem                         # writes
 ormas-monitor sign ormas_run --seal-only                                # record.json only, no key
 ```
 
-Keys are PEM files. The private key is written unencrypted with mode `0600`, and `keygen` never overwrites an existing file. Keep it out of the run directory and out of version control.
+Keys are PEM files. The private key is written unencrypted with mode `0600` on macOS and Linux (Windows has no such permission bits), and `keygen` never overwrites an existing file. Keep it out of the run directory and out of version control.
 
 The format can be checked without this package: `shasum -a 256` for the files, and, with OpenSSL 3,
 
