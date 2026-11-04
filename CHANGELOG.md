@@ -2,6 +2,17 @@
 
 All notable changes to `ormas-monitor` are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [semantic versioning](https://semver.org/) (before 1.0, a minor release may change the API).
 
+## [Unreleased]
+
+### Added
+- `examples/reproduce/vgg19_real_photos.py`: compares VGG-19-BN with its flagged channels cut out on 10,000 ImageNetV2 photos, inputs far from photos and a live-channel control, and measures CPU speed in paired rounds.
+- `examples/reproduce/torchvision_real_photos.py` and `scan_results/real_photos.md`: flagged channels on 2,000 real photos for all 21 BN→ReLU models.
+
+### Changed
+- Results now use real ImageNet-style photos in place of 64 upscaled CIFAR-10 images. CPU speed for VGG-19-BN is restated as 11–18% (was 12–18%). All 10,000 answers matched.
+- "Finds and proves" corrected to "finds" for the flagged channels in Results §6: they are decayed to ~0, not exactly zero, so no certificate covers them.
+- README and FAQ now say that CI runs on Linux, macOS and Windows, and that the demo and measured numbers have not been run on Linux or NVIDIA.
+
 ## [0.2.3] — 2026-10-23
 
 ### Added

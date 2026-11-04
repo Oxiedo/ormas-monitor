@@ -13,7 +13,7 @@ Everything runs on your machine. The core makes no network calls and never reads
 ## Why use it
 
 - **Alerts you can automate.** Other tools say a layer *looks* dead. This one issues a certificate only when the channel provably cannot recover, so it is safe to drive repairs and release gates (`check --fail-on warning`) without a human in the loop.
-- **Find dead weight you already ship.** In 19 of 21 torchvision ImageNet models that use BatchNorm → ReLU, it found channels decayed to ~0, up to 9.9% of the checked channels in DenseNet-169. Switching them off left the answers unchanged; switching off the same number of live channels changed them on 98–100% of images. In VGG-19-BN, **cutting them out saved 18.6% of the compute and ran 12–18% faster on CPU, with identical answers** ([details](https://github.com/Oxiedo/ormas-monitor/blob/main/docs/results.md#6-removing-dead-channels-makes-a-model-smaller-and-faster)).
+- **Find dead weight you already ship.** In 19 of 21 torchvision ImageNet models that use BatchNorm → ReLU, it found channels decayed to ~0, from 1 of 7,616 in ResNet-50 to 9.9% of the checked channels in DenseNet-169. Switching them off left the answers unchanged; switching off the same number of live channels changed them on 98–100% of images. In VGG-19-BN, **cutting them out saved 18.6% of the compute and ran 11–18% faster on one laptop CPU, with identical answers on 10,000 real photos** ([details](https://github.com/Oxiedo/ormas-monitor/blob/main/docs/results.md#6-removing-dead-channels-makes-a-model-smaller-and-faster)).
 - **A signed record of what happened in training,** plus a one-page summary for non-engineers.
 - **Nothing to trust us with:** open source, local, never reads your data.
 
@@ -67,7 +67,8 @@ All numbers: one seed (0), one Apple M-series Mac (training on its GPU via MPS, 
 | Dead-layer demo, full (50k images): conv2 and conv3 zeroed, optimizer state cleared | healthy 78.84% → watch-only **10.00%** for all 12 epochs → with repair **76.77%** (192 channels repaired) |
 | Dead-layer demo, quick (`ormas-monitor demo`) | 61.76% → **10.00%** → **59.12%** (190 channels repaired) |
 | Overhead at `check_every=50` | **+3.6%** median epoch time (12.12 s → 12.55 s) |
-| `check` on torchvision ImageNet models | **19 of 21** BN→ReLU models carry channels decayed to ~0; DenseNet-169: 7,667 of 77,536 (9.9%) |
+| `check` on torchvision ImageNet models | **19 of 21** BN→ReLU models carry channels decayed to ~0, from 1 of 7,616 (ResNet-50) to 7,667 of 77,536 (DenseNet-169, 9.9%) |
+| VGG-19-BN with the flagged channels cut out (ImageNetV2) | **10,000 of 10,000** answers identical; **18.6%** less compute; 11–18% faster on one laptop CPU |
 | The paper's own StandardCNN | 160 of 256 classifier hidden units never fire on any of the 10,000 test images |
 
 Details and exact reproduce commands: [docs/results.md](https://github.com/Oxiedo/ormas-monitor/blob/main/docs/results.md).
@@ -101,7 +102,7 @@ pip install "ormas-monitor[demo]"             # torchvision, for `ormas-monitor 
 pip install "ormas-monitor[all]"
 ```
 
-Python 3.9+, PyTorch 2.3+ (declared). Run so far on Python 3.13 with PyTorch 2.11 (macOS); the CI matrix (Linux, macOS, Windows; Python 3.9 and 3.12; CPU) is set up but has not run yet. **Status: OPEN.**
+Python 3.9+, PyTorch 2.3+ (declared). Run so far on Python 3.13 with PyTorch 2.11 (macOS); the test suite runs in CI on Linux, macOS and Windows (Python 3.9 and 3.12, CPU only). The demo and the measured numbers have not been run on Linux or NVIDIA.
 
 ## Documentation
 

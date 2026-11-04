@@ -64,19 +64,18 @@ The checks run only on sampled steps, so `check_every` trades detail for speed. 
 
 The full table for all 22 models is in [`scan_results/scan.md`](https://github.com/Oxiedo/ormas-monitor/blob/main/scan_results/scan.md).
 
-On 64 real images (CIFAR-10 test images upscaled to 224 px), these channels output **exactly 0** in ResNet-18, VGG-19-BN and MnasNet, and at most 1.5 × 10⁻⁶ in DenseNet-169.
+None of these channels is *exactly* zero, so none is certified, and this is measurement rather than proof. Shrinking BatchNorm scales toward zero is also a known pruning technique (network slimming), and filters that stop responding have been described before (Mehta et al., CVPR 2019), so the point is not that such channels exist; it is that one command finds them.
 
-None of these channels is *exactly* zero, so none is certified. Shrinking BatchNorm scales toward zero is also a known pruning technique (network slimming), so the point is not that such channels exist; it is that one command finds them.
+**On real photos.** On 2,000 ImageNetV2 photos across the ImageNet classes:
 
-**Reproduce:** `python examples/scan_public_models.py` (downloads about 1.5 GB of weights; needs torchvision).
+- in 17 of the 19 models, the flagged channels output **exactly 0** on every photo;
+- in DenseNet-121 and DenseNet-169 they fire very slightly, at most 6.2 × 10⁻⁶, against a typical peak of about 0.5 for the other channels in the same layers. Switching them all off changed **0 of 2,000** answers.
 
-**Reproduce the 64-image activation check:**
+The whole table is in [`scan_results/real_photos.md`](https://github.com/Oxiedo/ormas-monitor/blob/main/scan_results/real_photos.md).
 
-```bash
-python examples/reproduce/decayed_channels_on_images.py --data DIR
-```
+**Reproduce the scan:** `python examples/scan_public_models.py` (downloads about 1.5 GB of weights; needs torchvision).
 
-Output on the reference machine: the flagged channels' largest post-ReLU output is 0.00e+00 in resnet18, vgg19_bn and mnasnet1_0, and 1.54e-06 in densenet169. The median peak of the other channels in the same layers is 1.52, 0.82, 0.93 and 0.27 respectively.
+**Reproduce the photo test:** `python examples/reproduce/torchvision_real_photos.py --data DIR` (the download command for ImageNetV2 is at the top of the script).
 
 ## 4. Checkpoint check: time and memory
 
@@ -105,20 +104,46 @@ It trains the 8 pre-lesion epochs, then counts the units that never fire. Output
 
 ## 6. Removing dead channels makes a model smaller and faster
 
-`check` flagged 292 dead channels in torchvision's ImageNet VGG-19-BN. These are channels whose BatchNorm output is a constant ≤ 0 before a ReLU, so they always output 0. We cut them out of the network: their filters, their BatchNorm entries, and the matching inputs of the next layer. Then we compared the cut model with the original on 64 real photos (CIFAR-10 test images upscaled to 224 px).
+`check` flagged 292 channels in torchvision's ImageNet VGG-19-BN (`IMAGENET1K_V1`). They are decayed to ~0, not exactly zero, so no certificate covers them. We cut them out of the network: their filters, their BatchNorm entries, and the matching inputs of the next layer. Then we compared the cut model with the original on 10,000 ImageNetV2 photos across all 1,000 ImageNet classes.
 
-| | Original | Dead channels removed |
+| | Original | Flagged channels removed |
 |---|---:|---:|
-| Top-1 answers | — | **identical on 100% of photos** (largest logit difference 1.3 × 10⁻⁵, floating-point rounding) |
+| Top-1 accuracy | 61.9% | 61.9% |
+| Top-5 accuracy | 83.5% | 83.5% |
+| Answers compared with the original | — | **identical on 10,000 of 10,000 photos** |
+| Largest logit difference | — | 0 on the Mac's GPU (1.3 × 10⁻⁵ on CPU in an earlier run: floating-point rounding) |
 | Compute per image | 19.63 GMACs | 15.98 GMACs (**18.6% less**) |
 | Parameters | 143.7M | 142.2M |
-| CPU latency, batch 16 | — | **12–18% faster** (three runs on an Apple-silicon laptop: 11.7%, 12.7%, 18.4%) |
+| CPU speed, batch 16 | — | **15–18% faster** |
+| CPU speed, batch 1 | — | **11–13% faster** |
 
-The compute saving is much larger than the share of channels (5.3%) because most of the dead channels sit in the early layers, which run at high resolution. In one 224 × 224 layer, 20 of 64 channels are dead.
+CPU speed: one Apple M2, 1 and 4 threads, two separate runs of 7 alternating rounds per setting. The cut model was faster in all 56 rounds.
 
-Reproduce: `python examples/reproduce/prune_vgg19.py --data DIR`. The script contains the removal code; `ormas-monitor` itself finds and proves the channels but does not yet remove them for you.
+**Can this test fail?** Yes. Switching off 292 randomly chosen *live* channels instead changed 499 of 500 answers, and top-1 accuracy fell from 57.2% to under 1% (three random picks).
 
-How much a given model gains depends entirely on how many dead channels it carries. VGG-19-BN carries many; torchvision's ResNet-50 has one. Run `ormas-monitor check` on your model to see.
+**Inputs far from photos.** Solid colours, checkerboards, uniform noise and Gaussian noise up to σ = 100: the flagged channels still output exactly 0, and no answer changed. This is a test, not a proof that holds for every input.
+
+The compute saving is much larger than the share of channels (5.3%) because most of the flagged channels sit in the early layers, which run at high resolution. In one 224 × 224 layer, 20 of 64 channels are flagged.
+
+The gain depends entirely on the weights:
+
+| Model | Flagged channels | Compute saved if cut |
+|---|---:|---:|
+| vgg11_bn | 32 of 2,752 | 5.6% |
+| vgg13_bn | 91 of 2,944 | 17.8% |
+| vgg16_bn | 19 of 4,224 | 2.3% |
+| vgg19_bn | 292 of 5,504 | 18.6% |
+
+Only VGG-19-BN has been cut and compared this way. torchvision's ResNet-50 has one flagged channel, so there is nothing to gain there. Run `ormas-monitor check` on your model to see.
+
+**Reproduce:**
+
+```bash
+python examples/reproduce/vgg19_real_photos.py --data DIR     # the comparison; the script shows how to download the photos
+python examples/reproduce/vgg19_real_photos.py --latency      # CPU speed, in its own process
+```
+
+The removal code is in `examples/reproduce/prune_vgg19.py`. `ormas-monitor` itself finds the channels but does not yet remove them for you. The raw results are in [`scan_results/vgg19_real_photos.json`](https://github.com/Oxiedo/ormas-monitor/blob/main/scan_results/vgg19_real_photos.json).
 
 ## What these results do not show
 

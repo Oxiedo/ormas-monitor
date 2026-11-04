@@ -1,0 +1,149 @@
+{
+ "comparison": {
+  "flagged_channels": 292,
+  "gmacs": [
+   19.632062464,
+   15.97649704
+  ],
+  "params_millions": [
+   143.678248,
+   142.229794
+  ],
+  "compute_saving": 0.18620384030986759,
+  "torch": "2.11.0",
+  "device": "mps",
+  "photos": {
+   "images": 10000,
+   "same_top1": 10000,
+   "largest_logit_difference": 0.0,
+   "top1": [
+    0.619,
+    0.619
+   ],
+   "top5": [
+    0.835,
+    0.835
+   ],
+   "flagged_max_output": 0.0,
+   "flagged_channels_ever_positive": 0
+  },
+  "stress": {
+   "solid colours": {
+    "images": 16,
+    "same_top1": 16,
+    "largest_logit_difference": 0.0,
+    "flagged_max_output": 0.0,
+    "flagged_channels_ever_positive": 0
+   },
+   "checkerboards": {
+    "images": 8,
+    "same_top1": 8,
+    "largest_logit_difference": 0.0,
+    "flagged_max_output": 0.0,
+    "flagged_channels_ever_positive": 0
+   },
+   "uniform noise": {
+    "images": 32,
+    "same_top1": 32,
+    "largest_logit_difference": 0.0,
+    "flagged_max_output": 0.0,
+    "flagged_channels_ever_positive": 0
+   },
+   "gaussian sigma 1": {
+    "images": 32,
+    "same_top1": 32,
+    "largest_logit_difference": 0.0,
+    "flagged_max_output": 0.0,
+    "flagged_channels_ever_positive": 0
+   },
+   "gaussian sigma 3": {
+    "images": 32,
+    "same_top1": 32,
+    "largest_logit_difference": 0.0,
+    "flagged_max_output": 0.0,
+    "flagged_channels_ever_positive": 0
+   },
+   "gaussian sigma 10": {
+    "images": 32,
+    "same_top1": 32,
+    "largest_logit_difference": 0.0,
+    "flagged_max_output": 0.0,
+    "flagged_channels_ever_positive": 0
+   },
+   "gaussian sigma 100": {
+    "images": 32,
+    "same_top1": 32,
+    "largest_logit_difference": 0.0,
+    "flagged_max_output": 0.0,
+    "flagged_channels_ever_positive": 0
+   }
+  },
+  "live_control": {
+   "images": 500,
+   "top1_before": 0.5720000267028809,
+   "runs": [
+    {
+     "seed": 0,
+     "answers_changed": 499,
+     "top1": 0.004000000189989805
+    },
+    {
+     "seed": 1,
+     "answers_changed": 499,
+     "top1": 0.006000000052154064
+    },
+    {
+     "seed": 2,
+     "answers_changed": 499,
+     "top1": 0.0020000000949949026
+    }
+   ]
+  }
+ },
+ "cpu_latency": [
+  {
+   "threads": 4,
+   "batch": 16,
+   "rounds": 7,
+   "rounds_cut_was_faster": 7,
+   "median_ms": [
+    3612.861375000648,
+    2952.6516670011915
+   ],
+   "median_speedup": 0.17156722531712654
+  },
+  {
+   "threads": 4,
+   "batch": 1,
+   "rounds": 7,
+   "rounds_cut_was_faster": 7,
+   "median_ms": [
+    96.50220799812814,
+    85.45262500047102
+   ],
+   "median_speedup": 0.1134125306205086
+  },
+  {
+   "threads": 1,
+   "batch": 16,
+   "rounds": 7,
+   "rounds_cut_was_faster": 7,
+   "median_ms": [
+    3729.6965420027846,
+    3065.5488750016957
+   ],
+   "median_speedup": 0.15114261047639432
+  },
+  {
+   "threads": 1,
+   "batch": 1,
+   "rounds": 7,
+   "rounds_cut_was_faster": 7,
+   "median_ms": [
+    133.22558300205856,
+    116.52691699782736
+   ],
+   "median_speedup": 0.12486022282111575
+  }
+ ]
+}

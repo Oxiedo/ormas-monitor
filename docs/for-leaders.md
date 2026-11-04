@@ -30,7 +30,7 @@ A training run can fail silently: the loss curve still moves, but part of the mo
 
 | | What it saves | Evidence so far |
 |---|---|---|
-| **Leaner models** | Inference: the cost you pay every time the model runs | In VGG-19-BN, removing the dead channels it found cut compute by 18.6% and ran 12–18% faster on CPU, with identical answers. How much a given model gains depends on how many dead channels it carries; one `check` tells you. |
+| **Leaner models** | Inference: the cost you pay every time the model runs | In VGG-19-BN, removing the dead channels it found cut compute by 18.6% and ran 11–18% faster on one laptop CPU, with identical answers on 10,000 photos. How much a given model gains depends on how many dead channels it carries; one `check` tells you. |
 | **No wasted training runs** | GPU time on runs that broke without anyone noticing | In our CIFAR-10 test, the run without repair stayed stuck at chance from the break to the end: 92% of all its training steps. With repair on, the monitor caught the break at its next check and the run recovered without a restart. |
 | **Fewer bad releases** | Shipping a model that broke during fine-tuning | `check --against` names what died between two versions; `--fail-on warning` blocks the release automatically. |
 

@@ -46,7 +46,7 @@ Probably not broken, but it carries capacity it never uses. In our scan, 19 of 2
 
 ### Which versions are supported?
 
-Declared: Python 3.9 and later, PyTorch 2.3 and later. Run so far on Python 3.13 with PyTorch 2.11 on macOS. The CI workflow is set up to test Linux, macOS and Windows with Python 3.9 and 3.12, CPU only, but has not run yet. **Status: OPEN.**
+Declared: Python 3.9 and later, PyTorch 2.3 and later. Run by hand on Python 3.13 with PyTorch 2.11 on macOS. The test suite runs in CI on Linux, macOS and Windows with Python 3.9 and 3.12, CPU only. The demo and the measured numbers have not been run on Linux or NVIDIA.
 
 ### How do I cite it?
 
