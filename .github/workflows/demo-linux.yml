@@ -1,0 +1,28 @@
+# Runs what a new user would run, from PyPI, on a clean Linux machine. Started by hand.
+name: Demo on Linux
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  demo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install CPU-only PyTorch
+        run: pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+      - name: Install from PyPI, as the README says
+        run: pip install "ormas-monitor[demo]"
+      - run: ormas-monitor --version
+      - name: Run the quick demo
+        run: ormas-monitor demo --data data
+      - name: Check a published model
+        run: |
+          python -c "import torchvision; torchvision.models.vgg19_bn(weights='DEFAULT')"
+          ormas-monitor check ~/.cache/torch/hub/checkpoints/vgg19_bn-c79401a0.pth --arch torchvision:vgg19_bn
