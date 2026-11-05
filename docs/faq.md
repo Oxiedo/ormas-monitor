@@ -46,7 +46,7 @@ Probably not broken, but it carries capacity it never uses. In our scan, 19 of 2
 
 ### Which versions are supported?
 
-Declared: Python 3.9 and later, PyTorch 2.3 and later. Run by hand on Python 3.13 with PyTorch 2.11 on macOS. The test suite runs in CI on Linux, macOS and Windows with Python 3.9 and 3.12, CPU only. The demo and the measured numbers have not been run on Linux or NVIDIA.
+Declared: Python 3.9 and later, PyTorch 2.3 and later. Run by hand on Python 3.13 with PyTorch 2.11 on macOS. The test suite runs in CI on Linux, macOS and Windows with Python 3.9 and 3.12, CPU only. The quick demo and `check` have also run from PyPI on a clean CPU-only Linux machine. Nothing has been measured on NVIDIA GPUs.
 
 ### How do I cite it?
 

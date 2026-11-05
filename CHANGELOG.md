@@ -11,7 +11,8 @@ All notable changes to `ormas-monitor` are listed here. The format follows [Keep
 ### Changed
 - Results now use real ImageNet-style photos in place of 64 upscaled CIFAR-10 images. CPU speed for VGG-19-BN is restated as 11–18% (was 12–18%). All 10,000 answers matched.
 - "Finds and proves" corrected to "finds" for the flagged channels in Results §6: they are decayed to ~0, not exactly zero, so no certificate covers them.
-- README and FAQ now say that CI runs on Linux, macOS and Windows, and that the demo and measured numbers have not been run on Linux or NVIDIA.
+- README and FAQ now say that CI runs on Linux, macOS and Windows, and that nothing has been measured on NVIDIA GPUs.
+- `.github/workflows/demo-linux.yml` runs the quick demo and `check` from PyPI on a clean Linux machine. First result recorded in Results §1.
 
 ## [0.2.3] — 2026-10-23
 

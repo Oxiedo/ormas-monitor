@@ -1,6 +1,6 @@
 # Results
 
-Every number on this page was measured on **one Apple M-series Mac**: training results with seed 0 on its GPU (MPS), torch 2.11 and the default monitor settings, checkpoint timings on one run. None has been measured on NVIDIA/Linux, multi-GPU or at scale. The real reports are in [`sample_reports/`](https://github.com/Oxiedo/ormas-monitor/tree/main/sample_reports).
+Unless a line says otherwise, every number on this page was measured on **one Apple M-series Mac**: training results with seed 0 on its GPU (MPS), torch 2.11 and the default monitor settings, checkpoint timings on one run. None has been measured on NVIDIA GPUs, multi-GPU or at scale. The real reports are in [`sample_reports/`](https://github.com/Oxiedo/ormas-monitor/tree/main/sample_reports).
 
 ## 1. The dead-layer experiment
 
@@ -31,6 +31,8 @@ ormas-monitor demo --data DIR            # quick
 ```
 
 Expect different numbers on other hardware and other torch versions, even with a fixed seed: a fresh install that resolved torch 2.14.1 got 61.96% / 10.00% / 62.67% (191 repaired) on the quick demo. The qualitative result has held so far: watch-only stays at chance, repair recovers most of the accuracy.
+
+**On Linux:** installed from PyPI on a clean GitHub Actions machine (CPU only, torch 2.15, one run), the quick demo gave 61.14% / 10.00% / 58.60%, 190 repaired, in about 27 minutes. `check` on VGG-19-BN there flagged the same 292 channels in 2.2 s. The workflow is `.github/workflows/demo-linux.yml`.
 
 ## 2. Overhead
 

@@ -49,7 +49,7 @@ A new `Monitor` refuses to overwrite an existing record in its run directory (`F
 
 Using Lightning or the Hugging Face `Trainer`? Add one callback instead, `ormas_monitor.integrations.lightning.OrmasMonitorCallback` or `ormas_monitor.integrations.huggingface.OrmasMonitorCallback`: see [Lightning](https://github.com/Oxiedo/ormas-monitor/blob/main/docs/guides/lightning.md) and [Hugging Face](https://github.com/Oxiedo/ormas-monitor/blob/main/docs/guides/huggingface.md).
 
-**3. Watch it catch a broken layer (about a minute on an Apple M-series Mac, after the download)**
+**3. Watch it catch a broken layer (about a minute on an Apple M-series Mac, about 27 minutes on a CPU-only Linux machine, after the download)**
 
 ```bash
 pip install "ormas-monitor[demo]"
@@ -60,7 +60,7 @@ Or open the real reports without installing anything: [`sample_reports/`](https:
 
 ## What it found (verified)
 
-All numbers: one seed (0), one Apple M-series Mac (training on its GPU via MPS, torch 2.11), CIFAR-10 unless stated. Exact accuracies vary with torch version and hardware (a fresh install with torch 2.14.1 got 61.96% / 10.00% / 62.67%, 191 repaired, on the quick demo); the qualitative result holds. Not yet measured on NVIDIA/Linux, multi-GPU or at scale.
+All numbers: one seed (0), one Apple M-series Mac (training on its GPU via MPS, torch 2.11), CIFAR-10 unless stated. Exact accuracies vary with torch version and hardware (a fresh install with torch 2.14.1 got 61.96% / 10.00% / 62.67%, 191 repaired, on the quick demo); the qualitative result holds. The quick demo also ran from PyPI on a clean CPU-only Linux machine (torch 2.15): 61.14% / 10.00% / 58.60%, 190 repaired. Not yet measured on NVIDIA GPUs, multi-GPU or at scale.
 
 | Experiment | Result |
 |---|---|
@@ -85,7 +85,7 @@ In a Conv/Linear → BatchNorm → ReLU channel, if the incoming filter or the B
 - **Never reads your data.** It cannot find mislabelled examples.
 - **No uploads.** Nothing leaves your machine unless you add a sink that sends data (W&B, MLflow, a webhook).
 - **Not the first to notice dead units.** ReDo (Sokar et al., ICML 2023) and network slimming came first. We claim the certificate and the packaging.
-- **Not yet tested on NVIDIA/Linux, multi-GPU or at scale.**
+- **Not yet tested on NVIDIA GPUs, multi-GPU or at scale.**
 
 Full list: [docs/limitations.md](https://github.com/Oxiedo/ormas-monitor/blob/main/docs/limitations.md).
 
@@ -102,7 +102,7 @@ pip install "ormas-monitor[demo]"             # torchvision, for `ormas-monitor 
 pip install "ormas-monitor[all]"
 ```
 
-Python 3.9+, PyTorch 2.3+ (declared). Run so far on Python 3.13 with PyTorch 2.11 (macOS); the test suite runs in CI on Linux, macOS and Windows (Python 3.9 and 3.12, CPU only). The demo and the measured numbers have not been run on Linux or NVIDIA.
+Python 3.9+, PyTorch 2.3+ (declared). Run so far on Python 3.13 with PyTorch 2.11 (macOS); the test suite runs in CI on Linux, macOS and Windows (Python 3.9 and 3.12, CPU only). The quick demo and `check` have also run from PyPI on a clean CPU-only Linux machine. Nothing has been measured on NVIDIA GPUs.
 
 ## Documentation
 
